@@ -1,0 +1,13 @@
+# Netlify: the web dashboard (apps/web). Build from the repo root so npm workspaces (@verba/shared) resolve.
+[build]
+  command = "npm run build -w @verba/web"
+  publish = "apps/web/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# Single-page app: let the client router handle /users, /usage, /connect … on refresh.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
