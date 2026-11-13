@@ -9,7 +9,7 @@
     "apps/*"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "dev": "concurrently -n api,web -c magenta,cyan \"npm:dev:backend\" \"npm:dev:web\"",

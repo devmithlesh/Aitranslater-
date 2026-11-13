@@ -58,7 +58,9 @@ export function createApp(deps: AppDeps): Express {
 
   const app = express();
   app.disable('x-powered-by');
-  app.set('trust proxy', config.trustProxy);
+  // Trust exactly ONE proxy hop (the host's load balancer, e.g. Railway/Render). `true` would trust every
+  // X-Forwarded-For entry, letting clients spoof their IP and bypass the per-IP (login) rate limits.
+  app.set('trust proxy', config.trustProxy ? 1 : false);
   // Cross-origin must be allowed so the dashboard and extension can read responses.
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors(corsOptions(config)));
