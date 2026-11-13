@@ -1,8 +1,11 @@
 import { loadConfig } from './config/env';
+import type { AppConfig } from './config/env';
 import { loadSecrets } from './config/secrets';
 import { createApp } from './app';
 import { encodeConnectionCode } from '@verba/shared';
 import { createStorage } from './storage';
+import type { Storage } from './storage/types';
+import { ensureAdminAccount } from './services/auth.service';
 import { pruneExpiredHistory } from './services/history.service';
 
 const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
@@ -17,11 +20,24 @@ function printBox(lines: string[]): void {
   console.log(border);
 }
 
+/** Seeds the ADMIN_EMAIL account and drops expired sessions. Logs one line per outcome, never a secret. */
+async function bootAccounts(config: AppConfig, storage: Storage): Promise<void> {
+  const admin = await ensureAdminAccount(storage, config);
+  if (admin.result === 'created') console.log(`Admin account created for ${admin.email}.`);
+  if (admin.result === 'promoted') console.log(`Account ${admin.email} was promoted to admin.`);
+  if (admin.result === 'missing-password') {
+    console.warn(`ADMIN_EMAIL is set but no account exists for it. Set ADMIN_PASSWORD to create the admin.`);
+  }
+  const expired = await storage.pruneExpiredSessions(new Date().toISOString());
+  if (expired > 0) console.log(`Removed ${expired} expired session(s).`);
+}
+
 async function main(): Promise<void> {
   const config = loadConfig(process.env);
   const secrets = await loadSecrets(config);
   const storage = createStorage(config);
   await storage.init();
+  await bootAccounts(config, storage);
 
   const app = createApp({
     config,

@@ -14,6 +14,7 @@ import type {
   Storage,
   StoredAppConfig,
   StoredProviderConfig,
+  StoredSession,
   StoredUser,
 } from './types';
 
@@ -60,7 +61,10 @@ function assertNoError(error: { message: string } | null, operation: string): vo
 /** Singleton row key in app_config. */
 const APP_CONFIG_ROW_ID = 'global';
 
-/** Per-user tables (user_id column). Deleted by deleteUser. app_users is removed last so a failed delete can be retried. */
+/**
+ * Per-user tables (user_id column). Deleted by deleteUser. app_sessions is removed explicitly
+ * (the FK cascade would also do it); app_users is removed last so a failed delete can be retried.
+ */
 const USER_SCOPED_TABLES = [
   'user_settings',
   'custom_assistants',
@@ -70,12 +74,18 @@ const USER_SCOPED_TABLES = [
   'activity_stats',
   'extension_status',
   'credit_ledgers',
+  'app_sessions',
 ] as const;
 
 const appUserRowSchema = z.object({
   id: z.string(),
   name: z.string(),
-  token_hash: z.string(),
+  email: z.string(),
+  password_hash: z.string().nullable(),
+  google_sub: z.string().nullable(),
+  role: z.enum(['admin', 'user']),
+  plan: z.enum(['free', 'unlimited']),
+  must_change_password: z.boolean(),
   disabled: z.boolean(),
   daily_limit: z.number().nullable(),
   created_at: z.string(),
@@ -84,9 +94,20 @@ const appUserRowSchema = z.object({
 
 type AppUserRow = z.infer<typeof appUserRowSchema>;
 
+const appSessionRowSchema = z.object({
+  id: z.string(),
+  user_id: z.string(),
+  token_hash: z.string(),
+  created_at: z.string(),
+  expires_at: z.string(),
+});
+
+type AppSessionRow = z.infer<typeof appSessionRowSchema>;
+
 const appConfigRowSchema = z.object({
   default_daily_limit: z.number().nullable(),
   provider_daily_quotas: z.record(z.number()),
+  signups_enabled: z.boolean(),
 });
 
 const creditRowSchema = z.object({
@@ -98,7 +119,12 @@ function toStoredUser(row: AppUserRow): StoredUser {
   return {
     id: row.id,
     name: row.name,
-    tokenHash: row.token_hash,
+    email: row.email,
+    passwordHash: row.password_hash,
+    googleSub: row.google_sub,
+    role: row.role,
+    plan: row.plan,
+    mustChangePassword: row.must_change_password,
     disabled: row.disabled,
     dailyLimit: row.daily_limit,
     // Postgres returns "+00:00" offsets; normalise to the ISO form the rest of the app stores.
@@ -111,11 +137,26 @@ function toUserRow(user: StoredUser) {
   return {
     id: user.id,
     name: user.name,
-    token_hash: user.tokenHash,
+    email: user.email,
+    password_hash: user.passwordHash,
+    google_sub: user.googleSub,
+    role: user.role,
+    plan: user.plan,
+    must_change_password: user.mustChangePassword,
     disabled: user.disabled,
     daily_limit: user.dailyLimit,
     created_at: user.createdAt,
     last_used_at: user.lastUsedAt,
+  };
+}
+
+function toStoredSession(row: AppSessionRow): StoredSession {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    tokenHash: row.token_hash,
+    createdAt: new Date(row.created_at).toISOString(),
+    expiresAt: new Date(row.expires_at).toISOString(),
   };
 }
 
@@ -372,9 +413,16 @@ export class SupabaseStorage implements Storage {
     return data ? toStoredUser(appUserRowSchema.parse(data)) : undefined;
   }
 
-  async findUserByTokenHash(tokenHash: string): Promise<StoredUser | undefined> {
-    const { data, error } = await this.client.from('app_users').select('*').eq('token_hash', tokenHash).maybeSingle();
-    assertNoError(error, 'findUserByTokenHash');
+  async findUserByEmail(email: string): Promise<StoredUser | undefined> {
+    const { data, error } = await this.client.from('app_users').select('*').eq('email', email).maybeSingle();
+    assertNoError(error, 'findUserByEmail');
+    return data ? toStoredUser(appUserRowSchema.parse(data)) : undefined;
+  }
+
+  async findUserByGoogleSub(googleSub: string): Promise<StoredUser | undefined> {
+    // SQL `=` never matches NULL, so accounts without a Google link cannot match.
+    const { data, error } = await this.client.from('app_users').select('*').eq('google_sub', googleSub).maybeSingle();
+    assertNoError(error, 'findUserByGoogleSub');
     return data ? toStoredUser(appUserRowSchema.parse(data)) : undefined;
   }
 
@@ -396,16 +444,60 @@ export class SupabaseStorage implements Storage {
     return true;
   }
 
+  async saveSession(session: StoredSession): Promise<void> {
+    const { error } = await this.client.from('app_sessions').upsert({
+      id: session.id,
+      user_id: session.userId,
+      token_hash: session.tokenHash,
+      created_at: session.createdAt,
+      expires_at: session.expiresAt,
+    });
+    assertNoError(error, 'saveSession');
+  }
+
+  async findSessionByTokenHash(tokenHash: string): Promise<StoredSession | undefined> {
+    const { data, error } = await this.client
+      .from('app_sessions')
+      .select('*')
+      .eq('token_hash', tokenHash)
+      .maybeSingle();
+    assertNoError(error, 'findSessionByTokenHash');
+    return data ? toStoredSession(appSessionRowSchema.parse(data)) : undefined;
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    const { error } = await this.client.from('app_sessions').delete().eq('id', id);
+    assertNoError(error, 'deleteSession');
+  }
+
+  async deleteUserSessions(userId: string, exceptSessionId?: string): Promise<number> {
+    let query = this.client.from('app_sessions').delete().eq('user_id', userId);
+    if (exceptSessionId !== undefined) query = query.neq('id', exceptSessionId);
+    const { data, error } = await query.select('id');
+    assertNoError(error, 'deleteUserSessions');
+    return (data ?? []).length;
+  }
+
+  async pruneExpiredSessions(nowIso: string): Promise<number> {
+    const { data, error } = await this.client.from('app_sessions').delete().lt('expires_at', nowIso).select('id');
+    assertNoError(error, 'pruneExpiredSessions');
+    return (data ?? []).length;
+  }
+
   async getAppConfig(): Promise<StoredAppConfig | undefined> {
     const { data, error } = await this.client
       .from('app_config')
-      .select('default_daily_limit, provider_daily_quotas')
+      .select('default_daily_limit, provider_daily_quotas, signups_enabled')
       .eq('id', APP_CONFIG_ROW_ID)
       .maybeSingle();
     assertNoError(error, 'getAppConfig');
     if (!data) return undefined;
     const row = appConfigRowSchema.parse(data);
-    return { defaultDailyLimit: row.default_daily_limit, providerDailyQuotas: row.provider_daily_quotas };
+    return {
+      defaultDailyLimit: row.default_daily_limit,
+      providerDailyQuotas: row.provider_daily_quotas,
+      signupsEnabled: row.signups_enabled,
+    };
   }
 
   async saveAppConfig(config: StoredAppConfig): Promise<void> {
@@ -413,6 +505,7 @@ export class SupabaseStorage implements Storage {
       id: APP_CONFIG_ROW_ID,
       default_daily_limit: config.defaultDailyLimit,
       provider_daily_quotas: config.providerDailyQuotas,
+      signups_enabled: config.signupsEnabled ?? true,
     });
     assertNoError(error, 'saveAppConfig');
   }

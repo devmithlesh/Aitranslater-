@@ -12,7 +12,7 @@ export function CreditsBadge() {
   }
 
   const { credits } = me;
-  if (credits.limit === null) {
+  if (credits.limit === null || me.plan === 'unlimited') {
     return <p className="text-[13px] text-muted">Unlimited</p>;
   }
 

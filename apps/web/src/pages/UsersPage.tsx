@@ -2,9 +2,9 @@ import { Users, UserPlus } from 'lucide-react';
 import { useState } from 'react';
 import { Button, Card, EmptyState, ErrorState, PageHeader, Skeleton } from '@/components/ui';
 import { AddUserForm } from '@/features/admin/AddUserForm';
-import { ConnectionCodeReveal } from '@/features/admin/ConnectionCodeReveal';
-import type { RevealedCode } from '@/features/admin/connectionCode';
 import { DefaultLimitCard } from '@/features/admin/DefaultLimitCard';
+import { SignupsCard } from '@/features/admin/SignupsCard';
+import { TemporaryPasswordReveal, type RevealedPassword } from '@/features/admin/TemporaryPasswordReveal';
 import { UserRow } from '@/features/admin/UserRow';
 import { useUsersQuery } from '@/store/api';
 import { formatNumber } from '@/utils/format';
@@ -12,7 +12,7 @@ import { formatNumber } from '@/utils/format';
 export default function UsersPage() {
   const users = useUsersQuery();
   const [adding, setAdding] = useState(false);
-  const [revealed, setRevealed] = useState<RevealedCode | null>(null);
+  const [revealed, setRevealed] = useState<RevealedPassword | null>(null);
 
   let list;
   if (users.isError && !users.data) {
@@ -50,7 +50,7 @@ export default function UsersPage() {
     <div className="animate-slide-up">
       <PageHeader
         title="Users"
-        description="Share your Verba server with friends. Each person gets a connection code and a daily limit."
+        description="Create accounts with a temporary password, manage plans and limits, and reset passwords."
         icon={<Users size={20} aria-hidden />}
         actions={
           <Button
@@ -65,9 +65,12 @@ export default function UsersPage() {
       />
 
       <div className="space-y-6">
-        <DefaultLimitCard />
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <SignupsCard />
+          <DefaultLimitCard />
+        </div>
 
-        {revealed && <ConnectionCodeReveal {...revealed} onDismiss={() => setRevealed(null)} />}
+        {revealed && <TemporaryPasswordReveal {...revealed} onDismiss={() => setRevealed(null)} />}
 
         {adding && (
           <AddUserForm

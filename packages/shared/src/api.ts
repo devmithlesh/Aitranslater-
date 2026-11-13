@@ -29,6 +29,7 @@ export type ApiErrorCode =
   | 'UNAUTHORIZED' // 401
   | 'FORBIDDEN' // 403 — signed in, but this route is admin-only, or the account is disabled
   | 'NOT_FOUND' // 404
+  | 'CONFLICT' // 409 — e.g. an account with that email already exists
   | 'PAYLOAD_TOO_LARGE' // 413
   | 'RATE_LIMITED' // 429
   | 'CREDIT_LIMIT_REACHED' // 429 — the user's daily translation credits are used up
@@ -75,12 +76,93 @@ export interface VerifyResponse {
 
 // ── Accounts, roles and credits ─────────────────────────────────────
 /**
- * The server's own access token (VERBA_ACCESS_TOKEN) is the single admin (userId "local").
- * Every other account is a "user" created by the admin. Users may only call:
- * GET /auth/verify, GET /me, POST /translate-variants, GET /settings, PUT /settings (their own),
- * GET /assistants, POST /extension/heartbeat. Anything else returns 403 FORBIDDEN.
+ * Accounts sign up / log in with email + password and receive an opaque session token (Bearer),
+ * valid SESSION_DAYS days, stored server-side only as a SHA-256 hash (revocable; not a JWT).
+ * Account roles: "admin" (seeded from ADMIN_EMAIL + ADMIN_PASSWORD env on boot) or "user".
+ * The server's own VERBA_ACCESS_TOKEN still works as an emergency/self-host admin (userId "local").
+ *
+ * Public (no token): GET /health, GET /auth/config, POST /auth/signup, POST /auth/login, POST /auth/google.
+ * Role "user" may only call: GET /auth/verify, GET /me, POST /auth/logout, POST /auth/change-password,
+ * POST /auth/sessions, POST /translate-variants, GET /settings, PUT /settings (their own), GET /assistants,
+ * POST /extension/heartbeat. Anything else returns 403 FORBIDDEN. Admins may call everything.
  */
 export type UserRole = 'admin' | 'user';
+
+/**
+ * "free" = daily credit limit applies (override ?? default). "unlimited" = no limit (future paid plan;
+ * in v1 the admin can grant it on the Users page). The token admin and role "admin" are always unlimited.
+ */
+export type UserPlan = 'free' | 'unlimited';
+
+export const PASSWORD_MIN_LENGTH = 8;
+export const PASSWORD_MAX_LENGTH = 200;
+export const NAME_MAX_LENGTH = 60;
+export const EMAIL_MAX_LENGTH = 254;
+export const SESSION_DAYS = 30;
+
+/** GET /api/auth/config (public) — what the login/signup pages may offer. */
+export interface AuthConfigResponse {
+  signupsEnabled: boolean;
+  /** OAuth Web client ID for the "Sign in with Google" button; null when GOOGLE_CLIENT_ID is not configured (hide the button). */
+  googleClientId: string | null;
+}
+
+/**
+ * POST /api/auth/google (public) — `idToken` is the credential from Google Identity Services.
+ * The server verifies its RS256 signature against Google's JWKS, iss, aud (= GOOGLE_CLIENT_ID), exp and
+ * email_verified. An existing account with the same email is linked; otherwise a new "free" account is
+ * created (403 FORBIDDEN when signups are off). Disabled account → 403. Bad token → 401.
+ */
+export interface GoogleLoginRequest {
+  idToken: string;
+}
+
+/**
+ * POST /api/auth/sessions (any signed-in account) — mints an ADDITIONAL session, e.g. for the Chrome
+ * extension of a Google-signed-in user. The dashboard shows it as encodeConnectionCode(apiUrl, token).
+ */
+export interface NewSessionResponse {
+  token: string;
+  expiresAt: string;
+}
+
+/** POST /api/auth/signup (public). 403 FORBIDDEN when signups are off; 409 CONFLICT when the email is taken. */
+export interface SignupRequest {
+  /** 1..NAME_MAX_LENGTH after trim. */
+  name: string;
+  /** Trimmed and lower-cased by the server; must look like an email; at most EMAIL_MAX_LENGTH. */
+  email: string;
+  /** PASSWORD_MIN_LENGTH..PASSWORD_MAX_LENGTH characters. */
+  password: string;
+}
+
+/**
+ * POST /api/auth/login (public). Wrong email or password → 401 UNAUTHORIZED "Wrong email or password."
+ * (same message for both, so emails cannot be probed). Disabled account → 403 FORBIDDEN.
+ */
+export interface LoginRequest {
+  email: string;
+  password: string;
+}
+
+/** Response of signup and login. `token` is the Bearer token for every later request. */
+export interface AuthSessionResponse {
+  token: string;
+  /** ISO timestamp when the session stops working. */
+  expiresAt: string;
+  me: MeResponse;
+}
+
+/**
+ * POST /api/auth/change-password → 204. Wrong currentPassword → 400 VALIDATION_ERROR.
+ * currentPassword is ignored (may be omitted) when the account has no password yet (Google-only),
+ * which lets a Google user add a password. Clears mustChangePassword and signs out every OTHER session.
+ * POST /api/auth/logout → 204, ends the current session.
+ */
+export interface ChangePasswordRequest {
+  currentPassword?: string;
+  newPassword: string;
+}
 
 /**
  * Daily credits. 1 credit = 1 successful POST /translate-variants (all tones in one call).
@@ -100,18 +182,32 @@ export interface CreditStatus {
 export interface MeResponse {
   userId: string;
   name: string;
+  /** null for the token admin ("local"), which has no account. */
+  email: string | null;
   role: UserRole;
+  plan: UserPlan;
+  /** True after an admin reset: clients must make the user choose a new password before anything else. */
+  mustChangePassword: boolean;
+  /** Which sign-in methods the account has. */
+  hasPassword: boolean;
+  hasGoogle: boolean;
   credits: CreditStatus;
 }
 
-/** Admin view of one user. The token is never returned here (only its creation/regeneration response has it). */
+/** Admin view of one account. Passwords and their hashes are never returned. */
 export interface UserView {
   id: string;
   name: string;
+  email: string;
+  role: UserRole;
+  plan: UserPlan;
+  mustChangePassword: boolean;
+  hasPassword: boolean;
+  hasGoogle: boolean;
   disabled: boolean;
   /** Per-user override; null = this user follows AdminConfig.defaultDailyLimit. */
   dailyLimit: number | null;
-  /** The limit actually enforced: dailyLimit ?? defaultDailyLimit. null = unlimited. */
+  /** The limit actually enforced: null when role admin or plan unlimited, else dailyLimit ?? defaultDailyLimit (null = unlimited). */
   effectiveLimit: number | null;
   usedToday: number;
   usedThisMonth: number;
@@ -125,10 +221,11 @@ export interface UserListResponse {
   items: UserView[];
 }
 
-/** POST /api/admin/users */
+/** POST /api/admin/users — the admin creates an account for someone; 409 CONFLICT when the email is taken. */
 export interface CreateUserRequest {
-  /** 1..60 chars after trim. */
+  /** 1..NAME_MAX_LENGTH chars after trim. */
   name: string;
+  email: string;
   /** Omitted or null = follow the default limit. 0..100000. */
   dailyLimit?: number | null;
 }
@@ -137,22 +234,26 @@ export interface CreateUserRequest {
 export interface UpdateUserRequest {
   name?: string;
   disabled?: boolean;
+  plan?: UserPlan;
   /** null = follow the default limit. 0..100000. */
   dailyLimit?: number | null;
 }
 
 /**
- * Response of POST /api/admin/users and POST /api/admin/users/:id/token (regenerate; the old token stops
- * working). `token` is shown ONCE; the dashboard turns it into a connection code with
- * encodeConnectionCode(apiUrl, token). DELETE /api/admin/users/:id returns 204 and removes the user's data.
+ * Response of POST /api/admin/users and POST /api/admin/users/:id/reset-password. `temporaryPassword` is
+ * shown ONCE for the admin to send; the account gets mustChangePassword = true, and a reset signs out all
+ * of that account's sessions. DELETE /api/admin/users/:id returns 204 and removes the account and its data.
+ * The admin cannot disable, reset, or delete their own account through these routes (400).
  */
-export interface UserTokenResponse {
+export interface UserPasswordResponse {
   user: UserView;
-  token: string;
+  temporaryPassword: string;
 }
 
 /** GET /api/admin/config, PUT /api/admin/config (partial update, returns the full config). */
 export interface AdminConfig {
+  /** Whether POST /auth/signup accepts new accounts. Default true. */
+  signupsEnabled: boolean;
   /** Daily credits for every user without an override. null = unlimited. 0..100000. */
   defaultDailyLimit: number | null;
   /**

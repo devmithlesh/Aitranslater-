@@ -1,14 +1,14 @@
 import { Plug } from 'lucide-react';
 import { Button } from '../components/ui/Button';
 import { LogoMark } from '../components/Logo';
+import { DEFAULT_DASHBOARD_URL } from '../shared/messages';
 
 const STEPS = [
-  { title: 'Start your Verba server', body: 'Run the backend locally, or use your team’s hosted instance.' },
-  { title: 'Copy a connection code', body: 'In the dashboard, open Settings, then Extension, and copy the code.' },
-  { title: 'Paste it in Settings', body: 'Open Verba settings here and paste the code under Connection.' },
+  { title: 'Sign in with email', body: 'Open Verba settings and sign in with your email and password.' },
+  { title: 'Or use a code', body: 'Signed in with Google? On the website, open Account → Connect extension, then paste the code in Settings.' },
 ] as const;
 
-/** Shown when the extension is not connected to a Verba server yet. */
+/** Shown when the extension is not connected to a Verba account yet. */
 export function Onboarding({ onConnect }: { onConnect: () => void }) {
   return (
     <div className="space-y-4 p-4">
@@ -17,7 +17,7 @@ export function Onboarding({ onConnect }: { onConnect: () => void }) {
         <div className="relative flex items-center gap-3">
           <LogoMark size={40} />
           <div className="min-w-0">
-            <h2 className="text-[15px] font-semibold">Welcome to Verba</h2>
+            <h2 className="text-[15px] font-semibold">Sign in to Verba</h2>
             <p className="text-[12.5px] leading-5 text-muted">
               Translate, fix and rewrite text with AI, one shortcut away on any page.
             </p>
@@ -40,8 +40,20 @@ export function Onboarding({ onConnect }: { onConnect: () => void }) {
       </ol>
 
       <Button fullWidth icon={Plug} onClick={onConnect}>
-        Connect Verba
+        Open settings to sign in
       </Button>
+
+      <p className="text-center text-[12.5px] text-muted">
+        No account?{' '}
+        <a
+          href={`${DEFAULT_DASHBOARD_URL}/signup`}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-brand hover:underline"
+        >
+          Create one
+        </a>
+      </p>
     </div>
   );
 }

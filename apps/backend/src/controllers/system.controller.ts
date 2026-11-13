@@ -1,5 +1,5 @@
 import type { RequestHandler } from 'express';
-import type { HealthResponse, MeResponse, VerifyResponse } from '@verba/shared';
+import type { HealthResponse } from '@verba/shared';
 import { getAuth } from '../middleware/auth';
 import type { Services } from '../services';
 import { asyncHandler } from '../utils/request';
@@ -18,27 +18,18 @@ export function createSystemController(storage: 'file' | 'supabase') {
     res.json(body);
   };
 
-  const verify: RequestHandler = (_req, res) => {
-    const auth = getAuth(res);
-    const body: VerifyResponse = { ok: true, userId: auth.userId, role: auth.role, name: auth.name };
-    res.json(body);
-  };
-
-  return { health, verify };
+  return { health };
 }
 
-/** The caller's own profile and credits. */
+/** The caller's own identity (GET /auth/verify) and profile with credits (GET /me). */
 export function createMeController(services: Services) {
   return {
+    verify: asyncHandler(async (_req, res) => {
+      res.json({ ok: true, ...services.auth.profile(getAuth(res)) });
+    }),
+
     me: asyncHandler(async (_req, res) => {
-      const auth = getAuth(res);
-      const body: MeResponse = {
-        userId: auth.userId,
-        name: auth.name,
-        role: auth.role,
-        credits: await services.credits.status(auth),
-      };
-      res.json(body);
+      res.json(await services.auth.me(getAuth(res)));
     }),
   };
 }

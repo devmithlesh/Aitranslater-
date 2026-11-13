@@ -1,10 +1,10 @@
-import { Activity, Languages, LogOut, Monitor, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react';
+import { Activity, Languages, Monitor, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react';
 import { Suspense } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { IconButton, Spinner } from '@/components/ui';
+import { AccountMenu } from '@/features/auth/AccountMenu';
 import { useMe } from '@/features/credits/useMe';
 import { useAppDispatch, useAppSelector } from '@/store';
-import { disconnected } from '@/store/connectionSlice';
 import { themeChanged, type ThemePreference } from '@/store/uiSlice';
 import { cn } from '@/utils/cn';
 import { Logo } from './Logo';
@@ -19,7 +19,7 @@ const ADMIN_LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean 
   { to: '/usage', label: 'API usage', icon: Activity },
 ];
 
-/** Single-page shell: slim top bar with brand, theme, role-aware navigation, provider settings and disconnect. */
+/** Single-page shell: slim top bar with brand, theme, role-aware navigation, provider settings and the account menu. */
 export function SimpleLayout() {
   const dispatch = useAppDispatch();
   const navigate = useNavigate();
@@ -40,7 +40,7 @@ export function SimpleLayout() {
           {isAdmin && (
             <IconButton icon={Settings} label="AI provider settings" onClick={() => navigate('/settings/providers')} />
           )}
-          <IconButton icon={LogOut} label="Disconnect" onClick={() => dispatch(disconnected())} />
+          <AccountMenu />
         </div>
       </header>
       {isAdmin && (

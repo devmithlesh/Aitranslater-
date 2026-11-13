@@ -31,7 +31,7 @@ describe('auth and HTTP hardening', () => {
   it('accepts the correct token and verifies it', async () => {
     const res = await request(h.app).get('/api/auth/verify').set(AUTH);
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ ok: true, userId: 'local', role: 'admin', name: 'Admin' });
+    expect(res.body).toMatchObject({ ok: true, userId: 'local', role: 'admin', name: 'Admin', email: null });
   });
 
   it('returns VALIDATION_ERROR with issue details for a bad body', async () => {

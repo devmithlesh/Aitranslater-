@@ -44,11 +44,11 @@ describe('accounts, roles and daily credits', () => {
     it('describes the admin on verify and /me', async () => {
       const verify = await request(h.app).get('/api/auth/verify').set(AUTH);
       expect(verify.status).toBe(200);
-      expect(verify.body).toEqual({ ok: true, userId: 'local', role: 'admin', name: 'Admin' });
+      expect(verify.body).toMatchObject({ ok: true, userId: 'local', role: 'admin', name: 'Admin', email: null, plan: 'unlimited' });
 
       const me = await request(h.app).get('/api/me').set(AUTH);
       expect(me.status).toBe(200);
-      expect(me.body).toMatchObject({ userId: 'local', name: 'Admin', role: 'admin' });
+      expect(me.body).toMatchObject({ userId: 'local', name: 'Admin', role: 'admin', email: null, plan: 'unlimited' });
       expect(me.body.credits).toEqual({ limit: null, used: 0, remaining: null, resetsAt: NEXT_MIDNIGHT });
     });
 
@@ -57,7 +57,16 @@ describe('accounts, roles and daily credits', () => {
 
       const verify = await request(h.app).get('/api/auth/verify').set(as(token));
       expect(verify.status).toBe(200);
-      expect(verify.body).toEqual({ ok: true, userId: id, role: 'user', name: 'Friend' });
+      expect(verify.body).toMatchObject({
+        ok: true,
+        userId: id,
+        role: 'user',
+        name: 'Friend',
+        plan: 'free',
+        hasPassword: true,
+        hasGoogle: false,
+        mustChangePassword: false,
+      });
 
       const me = await request(h.app).get('/api/me').set(as(token));
       expect(me.status).toBe(200);
@@ -132,7 +141,7 @@ describe('accounts, roles and daily credits', () => {
       expect(disabled.status).toBe(200);
       expect(disabled.body.disabled).toBe(true);
 
-      const message = 'This account is disabled. Ask the admin to enable it.';
+      const message = 'This account is disabled.';
       for (const res of [
         await request(h.app).get('/api/auth/verify').set(as(token)),
         await request(h.app).get('/api/me').set(as(token)),
@@ -147,18 +156,6 @@ describe('accounts, roles and daily credits', () => {
       expect((await request(h.app).get('/api/me').set(as(token))).status).toBe(200);
     });
 
-    it('stops the old token immediately when it is regenerated', async () => {
-      const { id, token: oldToken } = await createUserAccount(h.app);
-      const regenerated = await request(h.app).post(`/api/admin/users/${id}/token`).set(AUTH);
-      expect(regenerated.status).toBe(200);
-      const newToken = regenerated.body.token as string;
-      expect(newToken).toMatch(/^vrb_/);
-      expect(newToken).not.toBe(oldToken);
-
-      expect((await request(h.app).get('/api/me').set(as(oldToken))).status).toBe(401);
-      expect((await request(h.app).get('/api/me').set(as(newToken))).status).toBe(200);
-    });
-
     it('revokes access when the user is deleted', async () => {
       const { id, token } = await createUserAccount(h.app);
       const deleted = await request(h.app).delete(`/api/admin/users/${id}`).set(AUTH);
@@ -167,7 +164,7 @@ describe('accounts, roles and daily credits', () => {
       expect((await request(h.app).get('/api/me').set(as(token))).status).toBe(401);
       expect((await request(h.app).delete(`/api/admin/users/${id}`).set(AUTH)).status).toBe(404);
       expect((await request(h.app).patch(`/api/admin/users/${id}`).set(AUTH).send({ name: 'x' })).status).toBe(404);
-      expect((await request(h.app).post(`/api/admin/users/${id}/token`).set(AUTH)).status).toBe(404);
+      expect((await request(h.app).post(`/api/admin/users/${id}/reset-password`).set(AUTH)).status).toBe(404);
     });
   });
 
@@ -314,6 +311,7 @@ describe('accounts, roles and daily credits', () => {
 
     it('round-trips the provider quota and default limit through /admin/config', async () => {
       expect((await request(h.app).get('/api/admin/config').set(AUTH)).body).toEqual({
+        signupsEnabled: true,
         defaultDailyLimit: null,
         providerDailyQuotas: {},
       });
@@ -323,7 +321,7 @@ describe('accounts, roles and daily credits', () => {
         .set(AUTH)
         .send({ defaultDailyLimit: 5, providerDailyQuotas: { gemini: 1000 } });
       expect(set.status).toBe(200);
-      expect(set.body).toEqual({ defaultDailyLimit: 5, providerDailyQuotas: { gemini: 1000 } });
+      expect(set.body).toEqual({ signupsEnabled: true, defaultDailyLimit: 5, providerDailyQuotas: { gemini: 1000 } });
       expect((await request(h.app).get('/api/admin/config').set(AUTH)).body).toEqual(set.body);
       const usage = await request(h.app).get('/api/admin/usage').set(AUTH);
       expect(usage.body.providers.find((p: { id: string }) => p.id === 'gemini').dailyQuota).toBe(1000);
@@ -333,10 +331,10 @@ describe('accounts, roles and daily credits', () => {
         .put('/api/admin/config')
         .set(AUTH)
         .send({ providerDailyQuotas: { gemini: 500, groq: null } });
-      expect(replaced.body).toEqual({ defaultDailyLimit: 5, providerDailyQuotas: { gemini: 500 } });
+      expect(replaced.body).toEqual({ signupsEnabled: true, defaultDailyLimit: 5, providerDailyQuotas: { gemini: 500 } });
 
       const cleared = await request(h.app).put('/api/admin/config').set(AUTH).send({ providerDailyQuotas: {}, defaultDailyLimit: null });
-      expect(cleared.body).toEqual({ defaultDailyLimit: null, providerDailyQuotas: {} });
+      expect(cleared.body).toEqual({ signupsEnabled: true, defaultDailyLimit: null, providerDailyQuotas: {} });
     });
 
     it('keeps admin routes and config closed to users', async () => {
@@ -350,10 +348,12 @@ describe('accounts, roles and daily credits', () => {
       const bad = [
         { name: '   ' },
         { name: 'x'.repeat(61) },
-        { name: 'ok', dailyLimit: -1 },
-        { name: 'ok', dailyLimit: 100_001 },
-        { name: 'ok', dailyLimit: 1.5 },
-        { name: 'ok', dailyLimit: '5' },
+        { name: 'ok', email: 'ok@example.com', dailyLimit: -1 },
+        { name: 'ok', email: 'ok@example.com', dailyLimit: 100_001 },
+        { name: 'ok', email: 'ok@example.com', dailyLimit: 1.5 },
+        { name: 'ok', email: 'ok@example.com', dailyLimit: '5' },
+        { name: 'ok', email: 'not-an-email' },
+        { name: 'ok' },
       ];
       for (const body of bad) {
         const res = await request(h.app).post('/api/admin/users').set(AUTH).send(body);

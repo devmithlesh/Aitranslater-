@@ -1,5 +1,9 @@
+import { EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH } from '@verba/shared';
 import { z } from 'zod';
 import { parseEncryptionKey } from '../utils/crypto';
+
+/** Same shape rule the sign-up form uses. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Provider secrets and endpoints read from the environment (see .env.example). */
 export const PROVIDER_ENV_KEYS = [
@@ -34,7 +38,14 @@ export interface AppConfig {
   requestTimeoutMs: number;
   rateLimitAiPerMinute: number;
   rateLimitPerMinute: number;
+  /** Per client IP, for POST /auth/login, /auth/signup and /auth/google (15-minute window). */
+  rateLimitAuthPer15Min: number;
   trustProxy: boolean;
+  /** OAuth Web client id for Google sign-in. null disables the button and POST /auth/google. */
+  googleClientId: string | null;
+  /** Admin account seeded on boot. Both null when not configured. */
+  adminEmail: string | null;
+  adminPassword: string | null;
   providerEnv: Readonly<Record<string, string | undefined>>;
 }
 
@@ -68,11 +79,28 @@ const envSchema = z
     REQUEST_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300000).default(30000),
     RATE_LIMIT_AI_PER_MINUTE: z.coerce.number().int().min(1).max(100000).default(30),
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(100000).default(300),
+    AUTH_RATE_LIMIT_PER_15_MIN: z.coerce.number().int().min(1).max(100000).default(20),
     TRUST_PROXY: flag('false'),
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    ADMIN_EMAIL: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .max(EMAIL_MAX_LENGTH, 'ADMIN_EMAIL is too long.')
+      .regex(EMAIL_PATTERN, 'ADMIN_EMAIL must be an email address.')
+      .optional(),
+    ADMIN_PASSWORD: z
+      .string()
+      .min(PASSWORD_MIN_LENGTH, `ADMIN_PASSWORD must be at least ${PASSWORD_MIN_LENGTH} characters.`)
+      .max(PASSWORD_MAX_LENGTH, `ADMIN_PASSWORD must be at most ${PASSWORD_MAX_LENGTH} characters.`)
+      .optional(),
     LIBRETRANSLATE_URL: z.string().url('LIBRETRANSLATE_URL must be a valid URL.').optional(),
     OLLAMA_BASE_URL: z.string().url('OLLAMA_BASE_URL must be a valid URL.').optional(),
   })
   .superRefine((env, ctx) => {
+    if (env.ADMIN_PASSWORD && !env.ADMIN_EMAIL) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['ADMIN_EMAIL'], message: 'Required when ADMIN_PASSWORD is set.' });
+    }
     if (env.STORAGE !== 'supabase') return;
     if (!env.SUPABASE_URL) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['SUPABASE_URL'], message: 'Required when STORAGE=supabase.' });
@@ -130,7 +158,11 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     requestTimeoutMs: data.REQUEST_TIMEOUT_MS,
     rateLimitAiPerMinute: data.RATE_LIMIT_AI_PER_MINUTE,
     rateLimitPerMinute: data.RATE_LIMIT_PER_MINUTE,
+    rateLimitAuthPer15Min: data.AUTH_RATE_LIMIT_PER_15_MIN,
     trustProxy: data.TRUST_PROXY,
+    googleClientId: data.GOOGLE_CLIENT_ID ?? null,
+    adminEmail: data.ADMIN_EMAIL ?? null,
+    adminPassword: data.ADMIN_PASSWORD ?? null,
     providerEnv,
   };
 }

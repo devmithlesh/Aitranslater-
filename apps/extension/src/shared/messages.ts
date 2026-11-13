@@ -9,10 +9,11 @@
  * Only the background worker talks to the backend and only it reads the
  * access token. Content scripts never see the token.
  */
-import type {
-  ApiErrorBody,
-  CustomAssistant,
-  UserSettings,
+import {
+  normalizeApiUrl,
+  type ApiErrorBody,
+  type CustomAssistant,
+  type UserSettings,
 } from '@verba/shared';
 
 // ── Stored state (chrome.storage.local) ─────────────────────────────
@@ -45,7 +46,8 @@ export type ExtensionErrorCode =
   | 'NOT_CONNECTED' // no connection configured
   | 'NETWORK_ERROR' // backend unreachable
   | 'PERMISSION_DENIED' // host permission for the backend origin missing
-  | 'FORBIDDEN_PATH'; // content script asked for a non-allow-listed endpoint
+  | 'FORBIDDEN_PATH' // content script asked for a non-allow-listed endpoint
+  | 'PASSWORD_RESET_REQUIRED'; // admin reset the password: finish on the website first
 
 export interface ExtensionError {
   code: ExtensionErrorCode;
@@ -65,6 +67,9 @@ export type BackgroundRequest =
   | { type: 'verba:get-state' }
   /** Accepts a connection code ("verba_…") or an explicit url+token. Verifies before saving. */
   | { type: 'verba:connect'; code?: string; apiUrl?: string; token?: string; dashboardUrl?: string }
+  /** Email + password sign-in. Never stores the password; saves only the session token it returns. */
+  | { type: 'verba:login'; apiUrl?: string; email: string; password: string; dashboardUrl?: string }
+  /** Ends the server session (best effort) and clears the local connection. */
   | { type: 'verba:disconnect' }
   /** Re-fetch settings + assistants from the backend now. */
   | { type: 'verba:sync' }
@@ -79,6 +84,7 @@ export interface BackgroundResponseMap {
   'verba:api': Result<unknown>;
   'verba:get-state': Result<ExtensionState>;
   'verba:connect': Result<ExtensionState>;
+  'verba:login': Result<ExtensionState>;
   'verba:disconnect': Result<ExtensionState>;
   'verba:sync': Result<ExtensionState>;
   'verba:set-dashboard-url': Result<ExtensionState>;
@@ -129,5 +135,14 @@ export const STORAGE_KEYS = {
   state: 'verba.state',
 } as const;
 
-/** Default dashboard URL when the backend URL is local (web dev server). */
-export const DEFAULT_DASHBOARD_URL = 'http://localhost:5173';
+/** Build-time URL, falling back to a local value. Trailing slashes are removed. */
+function envUrl(raw: string | undefined, fallback: string): string {
+  const cleaned = (raw ?? '').trim().replace(/\/+$/, '');
+  return cleaned === '' ? fallback : cleaned;
+}
+
+/** Default backend base URL (no "/api"). Set VITE_API_URL at build time to change it. */
+export const DEFAULT_API_URL = normalizeApiUrl(envUrl(import.meta.env.VITE_API_URL, 'http://localhost:8787'));
+
+/** Default dashboard (website) URL. Set VITE_DASHBOARD_URL at build time to change it. */
+export const DEFAULT_DASHBOARD_URL = envUrl(import.meta.env.VITE_DASHBOARD_URL, 'http://localhost:5173');

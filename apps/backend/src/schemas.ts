@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import {
   ACTIVITY_TYPES,
+  EMAIL_MAX_LENGTH,
+  NAME_MAX_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
   ASSISTANT_TOOLS,
   AUTO_LANGUAGE,
   LLM_PROVIDER_IDS,
@@ -18,6 +22,9 @@ import {
 } from '@verba/shared';
 import type { ProviderId } from '@verba/shared';
 import { isHttpUrl } from './utils/text';
+
+/** Same shape rule the server applies to ADMIN_EMAIL. */
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Request validation for every API route. Output types match the shared contract. */
 
@@ -206,24 +213,59 @@ export const heartbeatSchema = z.object({
   userAgent: z.string().max(300).optional(),
 });
 
-// ── Accounts and admin ──────────────────────────────────────────────
-const userName = z.string().trim().min(1, 'Name is required.').max(60);
+// ── Accounts, sessions and admin ────────────────────────────────────
+const userName = z.string().trim().min(1, 'Name is required.').max(NAME_MAX_LENGTH);
+/** Trimmed and lower-cased before the checks, so "  Ana@Example.com " is stored as "ana@example.com". */
+const emailAddress = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(EMAIL_MAX_LENGTH, 'Email is too long.')
+  .regex(EMAIL_PATTERN, 'Enter a valid email address.');
+const newPassword = z
+  .string()
+  .min(PASSWORD_MIN_LENGTH, 'Password must be at least ' + PASSWORD_MIN_LENGTH + ' characters.')
+  .max(PASSWORD_MAX_LENGTH, 'Password must be at most ' + PASSWORD_MAX_LENGTH + ' characters.');
 const dailyLimitValue = z.number().int().min(0).max(100_000);
 const nullableDailyLimit = z.union([z.null(), dailyLimitValue]);
 const PROVIDER_IDS = [...TRANSLATION_PROVIDER_IDS, ...LLM_PROVIDER_IDS] as [ProviderId, ...ProviderId[]];
 
+export const signupSchema = z.object({
+  name: userName,
+  email: emailAddress,
+  password: newPassword,
+});
+
+export const loginSchema = z.object({
+  email: emailAddress,
+  /** Any length: a wrong-length guess should get the same "Wrong email or password." answer. */
+  password: z.string().min(1, 'Password is required.').max(PASSWORD_MAX_LENGTH),
+});
+
+export const googleLoginSchema = z.object({
+  idToken: z.string().min(1, 'idToken is required.').max(8192),
+});
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().max(PASSWORD_MAX_LENGTH).optional(),
+  newPassword,
+});
+
 export const createUserSchema = z.object({
   name: userName,
+  email: emailAddress,
   dailyLimit: nullableDailyLimit.optional(),
 });
 
 export const updateUserSchema = z.object({
   name: userName.optional(),
   disabled: z.boolean().optional(),
+  plan: z.enum(['free', 'unlimited']).optional(),
   dailyLimit: nullableDailyLimit.optional(),
 });
 
 export const adminConfigUpdateSchema = z.object({
+  signupsEnabled: z.boolean().optional(),
   defaultDailyLimit: nullableDailyLimit.optional(),
   /** The object replaces the stored map. A null value removes that provider. */
   providerDailyQuotas: z

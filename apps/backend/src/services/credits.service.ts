@@ -22,13 +22,18 @@ export class Serializer {
 export async function readAppConfig(storage: Storage): Promise<StoredAppConfig> {
   const stored = await storage.getAppConfig();
   return {
+    signupsEnabled: stored?.signupsEnabled ?? true,
     defaultDailyLimit: stored?.defaultDailyLimit ?? null,
     providerDailyQuotas: { ...(stored?.providerDailyQuotas ?? {}) },
   };
 }
 
-/** The limit a user actually lives under: their override, else the server default. null = unlimited. */
+/**
+ * The limit a user actually lives under. Admins and "unlimited" plans have none (null). Everyone else gets
+ * their override, else the server default. null = unlimited.
+ */
 export function effectiveLimit(user: StoredUser, config: StoredAppConfig): number | null {
+  if (user.role === 'admin' || user.plan === 'unlimited') return null;
   return user.dailyLimit ?? config.defaultDailyLimit;
 }
 
@@ -117,9 +122,9 @@ export class CreditsService {
     });
   }
 
-  /** Records the last successful use of a user account. The admin has no stored record, so this is a no-op for it. */
+  /** Records the last successful use of an account. The server token has no stored record, so this is a no-op for it. */
   markUsed(auth: AuthContext): Promise<void> {
-    if (auth.role !== 'user') return Promise.resolve();
+    if (auth.serverToken) return Promise.resolve();
     return this.lock.run(async () => {
       const user = await this.storage.getUser(auth.userId);
       if (!user) return;

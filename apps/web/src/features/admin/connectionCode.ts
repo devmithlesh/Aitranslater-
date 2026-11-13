@@ -1,13 +1,5 @@
 import { encodeConnectionCode } from '@verba/shared';
 
-/** A freshly issued connection code. Lives only in component state; never persisted. */
-export interface RevealedCode {
-  name: string;
-  code: string;
-  /** True when the server URL is local, so the code only works on this computer. */
-  local: boolean;
-}
-
 /** Turns a one-time token into the code the user pastes into the app. */
 export function buildConnectionCode(apiUrl: string, token: string): string {
   return encodeConnectionCode(apiUrl, token);

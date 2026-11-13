@@ -12,6 +12,7 @@ import type {
   Storage,
   StoredAppConfig,
   StoredProviderConfig,
+  StoredSession,
   StoredUser,
 } from './types';
 
@@ -24,6 +25,8 @@ interface Collections {
   activity: Record<string, ActivityAggregates | undefined>;
   extension: Record<string, ExtensionStatusRecord | undefined>;
   users: Record<string, StoredUser | undefined>;
+  /** Keyed by session id (not user id). */
+  sessions: Record<string, StoredSession | undefined>;
   appConfig: StoredAppConfig | undefined;
   credits: Record<string, CreditLedger | undefined>;
 }
@@ -39,6 +42,7 @@ const COLLECTION_NAMES: readonly CollectionName[] = [
   'activity',
   'extension',
   'users',
+  'sessions',
   'appConfig',
   'credits',
 ];
@@ -65,6 +69,7 @@ const FILE_NAMES: Record<CollectionName, string> = {
   activity: 'activity',
   extension: 'extension',
   users: 'users',
+  sessions: 'sessions',
   appConfig: 'app-config',
   credits: 'credits',
 };
@@ -81,6 +86,7 @@ function emptyCollections(): Collections {
     activity: {},
     extension: {},
     users: {},
+    sessions: {},
     appConfig: undefined,
     credits: {},
   };
@@ -88,6 +94,40 @@ function emptyCollections(): Collections {
 
 function hasOwn(record: object, key: string): boolean {
   return Object.prototype.hasOwnProperty.call(record, key);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Fills in fields missing from users.json written before accounts had email/password/Google login.
+ * Unknown fields (such as the retired tokenHash) are dropped.
+ */
+function normalizeUser(key: string, raw: Record<string, unknown>): StoredUser {
+  return {
+    id: typeof raw.id === 'string' ? raw.id : key,
+    name: typeof raw.name === 'string' ? raw.name : '',
+    email: typeof raw.email === 'string' ? raw.email : '',
+    passwordHash: typeof raw.passwordHash === 'string' ? raw.passwordHash : null,
+    googleSub: typeof raw.googleSub === 'string' ? raw.googleSub : null,
+    role: raw.role === 'admin' ? 'admin' : 'user',
+    plan: raw.plan === 'unlimited' ? 'unlimited' : 'free',
+    mustChangePassword: raw.mustChangePassword === true,
+    disabled: raw.disabled === true,
+    dailyLimit: typeof raw.dailyLimit === 'number' ? raw.dailyLimit : null,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : new Date(0).toISOString(),
+    lastUsedAt: typeof raw.lastUsedAt === 'string' ? raw.lastUsedAt : null,
+  };
+}
+
+function normalizeUserRecords(value: unknown): Record<string, StoredUser | undefined> {
+  const result: Record<string, StoredUser | undefined> = {};
+  if (!isRecord(value)) return result;
+  for (const [key, raw] of Object.entries(value)) {
+    if (isRecord(raw)) result[key] = normalizeUser(key, raw);
+  }
+  return result;
 }
 
 /** Credit ledgers keep this many most recent day keys. */
@@ -146,7 +186,10 @@ export class FileStorage implements Storage {
       const text = await readOptional(this.pathFor(name));
       if (text === undefined) continue;
       try {
-        setCollection(this.data, name, JSON.parse(text));
+        const parsed: unknown = JSON.parse(text);
+        // Older users.json records lack the account fields; normalise them so reads never see undefined.
+        const value = name === 'users' ? normalizeUserRecords(parsed) : parsed;
+        setCollection(this.data, name, value as Collections[typeof name]);
       } catch {
         throw new Error(`${this.pathFor(name)} is not valid JSON. Move it aside to start with empty data.`);
       }
@@ -310,8 +353,16 @@ export class FileStorage implements Storage {
     return user ? { ...user } : undefined;
   }
 
-  async findUserByTokenHash(tokenHash: string): Promise<StoredUser | undefined> {
-    const user = Object.values(this.data.users).find((entry) => entry?.tokenHash === tokenHash);
+  async findUserByEmail(email: string): Promise<StoredUser | undefined> {
+    const user = Object.values(this.data.users).find((entry) => entry?.email === email);
+    return user ? { ...user } : undefined;
+  }
+
+  async findUserByGoogleSub(googleSub: string): Promise<StoredUser | undefined> {
+    // Accounts without a Google link store null, which must never match.
+    const user = Object.values(this.data.users).find(
+      (entry) => typeof entry?.googleSub === 'string' && entry.googleSub === googleSub,
+    );
     return user ? { ...user } : undefined;
   }
 
@@ -330,8 +381,50 @@ export class FileStorage implements Storage {
       delete bag[id];
       touched.push(name);
     }
+    if (this.removeSessionsWhere((session) => session.userId === id) > 0) touched.push('sessions');
     await Promise.all(touched.map((name) => this.persist(name)));
     return true;
+  }
+
+  async saveSession(session: StoredSession): Promise<void> {
+    this.data.sessions[session.id] = { ...session };
+    await this.persist('sessions');
+  }
+
+  async findSessionByTokenHash(tokenHash: string): Promise<StoredSession | undefined> {
+    const session = Object.values(this.data.sessions).find((entry) => entry?.tokenHash === tokenHash);
+    return session ? { ...session } : undefined;
+  }
+
+  async deleteSession(id: string): Promise<void> {
+    if (!hasOwn(this.data.sessions, id)) return;
+    delete this.data.sessions[id];
+    await this.persist('sessions');
+  }
+
+  async deleteUserSessions(userId: string, exceptSessionId?: string): Promise<number> {
+    const removed = this.removeSessionsWhere(
+      (session) => session.userId === userId && session.id !== exceptSessionId,
+    );
+    if (removed > 0) await this.persist('sessions');
+    return removed;
+  }
+
+  async pruneExpiredSessions(nowIso: string): Promise<number> {
+    const removed = this.removeSessionsWhere((session) => session.expiresAt < nowIso);
+    if (removed > 0) await this.persist('sessions');
+    return removed;
+  }
+
+  /** Removes matching sessions from memory (caller persists). Returns the count removed. */
+  private removeSessionsWhere(predicate: (session: StoredSession) => boolean): number {
+    let removed = 0;
+    for (const [id, session] of Object.entries(this.data.sessions)) {
+      if (!session || !predicate(session)) continue;
+      delete this.data.sessions[id];
+      removed += 1;
+    }
+    return removed;
   }
 
   async getAppConfig(): Promise<StoredAppConfig | undefined> {

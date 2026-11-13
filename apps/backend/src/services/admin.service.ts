@@ -16,6 +16,7 @@ const DAILY_WINDOW_DAYS = 14;
 
 /** What PUT /api/admin/config accepts after validation. A null quota removes that provider. */
 export interface AdminConfigPatch {
+  signupsEnabled?: boolean;
   defaultDailyLimit?: number | null;
   providerDailyQuotas?: Partial<Record<string, number | null>>;
 }
@@ -42,6 +43,7 @@ export class AdminService {
   async updateConfig(update: AdminConfigPatch): Promise<AdminConfig> {
     const current = await readAppConfig(this.storage);
     const next: StoredAppConfig = {
+      signupsEnabled: update.signupsEnabled !== undefined ? update.signupsEnabled : current.signupsEnabled,
       defaultDailyLimit: update.defaultDailyLimit !== undefined ? update.defaultDailyLimit : current.defaultDailyLimit,
       providerDailyQuotas:
         update.providerDailyQuotas !== undefined ? compactQuotas(update.providerDailyQuotas) : current.providerDailyQuotas,
@@ -115,6 +117,7 @@ export class AdminService {
 
 function toAdminConfig(config: StoredAppConfig): AdminConfig {
   return {
+    signupsEnabled: config.signupsEnabled ?? true,
     defaultDailyLimit: config.defaultDailyLimit,
     providerDailyQuotas: { ...config.providerDailyQuotas } as AdminConfig['providerDailyQuotas'],
   };

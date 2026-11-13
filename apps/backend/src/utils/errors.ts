@@ -25,6 +25,8 @@ export const unauthorized = (message = 'Missing or invalid access token.'): AppE
 
 export const forbidden = (message: string): AppError => new AppError('FORBIDDEN', 403, message);
 
+export const conflict = (message: string): AppError => new AppError('CONFLICT', 409, message);
+
 export const notConfigured = (message: string): AppError =>
   new AppError('NO_PROVIDER_CONFIGURED', 503, message);
 

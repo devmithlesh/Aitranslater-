@@ -11,19 +11,26 @@ import {
   type AdminConfigUpdate,
   type AdminUsageResponse,
   type ApiErrorBody,
+  type AuthConfigResponse,
+  type AuthSessionResponse,
+  type ChangePasswordRequest,
   type CreateUserRequest,
+  type GoogleLoginRequest,
+  type LoginRequest,
   type MeResponse,
+  type NewSessionResponse,
   type ProviderId,
   type ProviderListResponse,
   type ProviderTestResponse,
   type ProviderUpdateRequest,
   type ProviderView,
+  type SignupRequest,
   type TranslateVariantsRequest,
   type TranslateVariantsResponse,
   type UpdateUserRequest,
   type UserListResponse,
+  type UserPasswordResponse,
   type UserSettings,
-  type UserTokenResponse,
   type UserView,
 } from '@verba/shared';
 import { tokenRejected } from './connectionSlice';
@@ -35,6 +42,11 @@ export interface AppError {
   code: ApiErrorBody['error']['code'] | 'NETWORK_ERROR';
   message: string;
   details?: unknown;
+}
+
+/** Per-endpoint options. Sign-in endpoints answer 401 for wrong credentials, which must not end the session. */
+interface EndpointOptions {
+  skipTokenReject?: boolean;
 }
 
 const REQUEST_TIMEOUT_MS = 45_000;
@@ -74,13 +86,13 @@ function toAppError(err: FetchBaseQueryError): AppError {
 }
 
 /** Prefixes the user-configured server URL and normalizes errors to AppError. */
-const baseQuery: BaseQueryFn<string | FetchArgs, unknown, AppError> = async (args, api, extra) => {
+const baseQuery: BaseQueryFn<string | FetchArgs, unknown, AppError, EndpointOptions> = async (args, api, options) => {
   const { apiUrl } = (api.getState() as RootState).connection;
   const req = typeof args === 'string' ? { url: args } : args;
-  const result = await rawBaseQuery({ ...req, url: `${apiUrl}/api${req.url}` }, api, extra);
+  const result = await rawBaseQuery({ ...req, url: `${apiUrl}/api${req.url}` }, api, options);
   if (result.error) {
     const error = toAppError(result.error);
-    if (error.status === 401) api.dispatch(tokenRejected());
+    if (error.status === 401 && !options?.skipTokenReject) api.dispatch(tokenRejected());
     return { error, meta: result.meta };
   }
   return { data: result.data, meta: result.meta };
@@ -121,8 +133,38 @@ export const api = createApi({
       invalidatesTags: ['Providers'],
     }),
 
-    /** The caller's own profile, role and daily credits. */
+    /** The caller's own profile, role, plan, password state and daily credits. */
     me: build.query<MeResponse, void>({ query: () => '/me', providesTags: ['Me'] }),
+
+    // ── Accounts: public sign-in ────────────────────────────────────
+    authConfig: build.query<AuthConfigResponse, void>({ query: () => '/auth/config' }),
+    signup: build.mutation<AuthSessionResponse, SignupRequest>({
+      query: (body) => ({ url: '/auth/signup', method: 'POST', body }),
+      extraOptions: { skipTokenReject: true },
+    }),
+    login: build.mutation<AuthSessionResponse, LoginRequest>({
+      query: (body) => ({ url: '/auth/login', method: 'POST', body }),
+      extraOptions: { skipTokenReject: true },
+    }),
+    googleLogin: build.mutation<AuthSessionResponse, GoogleLoginRequest>({
+      query: (body) => ({ url: '/auth/google', method: 'POST', body }),
+      extraOptions: { skipTokenReject: true },
+    }),
+
+    // ── Accounts: signed in ─────────────────────────────────────────
+    logout: build.mutation<void, void>({
+      query: () => ({ url: '/auth/logout', method: 'POST' }),
+      extraOptions: { skipTokenReject: true },
+    }),
+    /** Clears mustChangePassword on the server; the caller also updates the cached `me` before navigating. */
+    changePassword: build.mutation<void, ChangePasswordRequest>({
+      query: (body) => ({ url: '/auth/change-password', method: 'POST', body }),
+      invalidatesTags: ['Me'],
+    }),
+    /** Mints an extra session token, e.g. for the Chrome extension. */
+    createSession: build.mutation<NewSessionResponse, void>({
+      query: () => ({ url: '/auth/sessions', method: 'POST' }),
+    }),
 
     // ── Admin: users ────────────────────────────────────────────────
     users: build.query<UserView[], void>({
@@ -130,7 +172,7 @@ export const api = createApi({
       transformResponse: (r: UserListResponse) => r.items,
       providesTags: ['Users'],
     }),
-    createUser: build.mutation<UserTokenResponse, CreateUserRequest>({
+    createUser: build.mutation<UserPasswordResponse, CreateUserRequest>({
       query: (body) => ({ url: '/admin/users', method: 'POST', body }),
       invalidatesTags: ['Users', 'AdminUsage'],
     }),
@@ -138,9 +180,9 @@ export const api = createApi({
       query: ({ id, patch }) => ({ url: `/admin/users/${id}`, method: 'PATCH', body: patch }),
       invalidatesTags: ['Users'],
     }),
-    /** Issues a new token; the old one stops working. The token is returned once. */
-    regenerateUserToken: build.mutation<UserTokenResponse, string>({
-      query: (id) => ({ url: `/admin/users/${id}/token`, method: 'POST' }),
+    /** Issues a temporary password (returned once) and signs the account out everywhere. */
+    resetUserPassword: build.mutation<UserPasswordResponse, string>({
+      query: (id) => ({ url: `/admin/users/${id}/reset-password`, method: 'POST' }),
       invalidatesTags: ['Users'],
     }),
     deleteUser: build.mutation<void, string>({
@@ -166,10 +208,17 @@ export const {
   useUpdateProviderMutation,
   useTestProviderMutation,
   useMeQuery,
+  useAuthConfigQuery,
+  useSignupMutation,
+  useLoginMutation,
+  useGoogleLoginMutation,
+  useLogoutMutation,
+  useChangePasswordMutation,
+  useCreateSessionMutation,
   useUsersQuery,
   useCreateUserMutation,
   useUpdateUserMutation,
-  useRegenerateUserTokenMutation,
+  useResetUserPasswordMutation,
   useDeleteUserMutation,
   useAdminConfigQuery,
   useUpdateAdminConfigMutation,

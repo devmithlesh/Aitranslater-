@@ -3,10 +3,12 @@ import { fail, ok } from '../lib/result';
 import { classifySender, isHttpMethod, isRequestAllowed } from '../lib/policy';
 import { isRecord } from '../lib/guards';
 import { readState } from '../lib/storage';
+import { EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH } from '@verba/shared';
 import { callBackend } from './backend';
 import {
   connectExtension,
   disconnectExtension,
+  loginExtension,
   openDashboard,
   openOptions,
   setDashboardUrl,
@@ -15,6 +17,21 @@ import { syncNow } from './sync';
 
 function optString(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
+}
+
+/** Email (trimmed, 1..EMAIL_MAX_LENGTH) and password (1..PASSWORD_MAX_LENGTH, not trimmed). */
+function parseLogin(value: Record<string, unknown>): BackgroundRequest | null {
+  if (typeof value.email !== 'string' || typeof value.password !== 'string') return null;
+  const email = value.email.trim();
+  if (email.length === 0 || email.length > EMAIL_MAX_LENGTH) return null;
+  if (value.password.length === 0 || value.password.length > PASSWORD_MAX_LENGTH) return null;
+  return {
+    type: 'verba:login',
+    apiUrl: optString(value.apiUrl),
+    email,
+    password: value.password,
+    dashboardUrl: optString(value.dashboardUrl),
+  };
 }
 
 /** Validates an untrusted runtime message into a typed request, or null. */
@@ -35,6 +52,8 @@ export function parseRequest(value: unknown): BackgroundRequest | null {
         token: optString(value.token),
         dashboardUrl: optString(value.dashboardUrl),
       };
+    case 'verba:login':
+      return parseLogin(value);
     case 'verba:disconnect':
       return { type: 'verba:disconnect' };
     case 'verba:sync':
@@ -58,6 +77,8 @@ async function dispatch(request: BackgroundRequest): Promise<unknown> {
       return ok(await readState());
     case 'verba:connect':
       return connectExtension(request);
+    case 'verba:login':
+      return loginExtension(request);
     case 'verba:disconnect':
       return disconnectExtension();
     case 'verba:sync':
@@ -78,7 +99,13 @@ export async function handleRequest(message: unknown, sender: chrome.runtime.Mes
     if (trust === 'untrusted') return fail('FORBIDDEN_PATH', 'This sender is not allowed to use Verba.');
 
     const request = parseRequest(message);
-    if (!request) return fail('VALIDATION_ERROR', 'Unknown Verba request.');
+    if (!request) {
+      // Login gets its own message: the form validates first, so this only happens for malformed input.
+      if (isRecord(message) && message.type === 'verba:login') {
+        return fail('VALIDATION_ERROR', 'Enter a valid email and password.');
+      }
+      return fail('VALIDATION_ERROR', 'Unknown Verba request.');
+    }
     if (!isRequestAllowed(trust, request)) {
       return fail('FORBIDDEN_PATH', 'This request is not allowed from this page.');
     }

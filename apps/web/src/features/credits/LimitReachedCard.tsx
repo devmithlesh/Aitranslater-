@@ -11,6 +11,11 @@ export function LimitReachedCard({ resetsAt }: { resetsAt?: string | null }) {
         icon={Clock}
         title={`Daily limit reached — resets at ${time}`}
         description="You have used today's translations. Come back after the reset, or ask the admin for a higher limit."
+        action={
+          <span className="inline-flex items-center rounded-full border border-border bg-surface-2 px-3 py-1 text-[12.5px] font-medium text-subtle">
+            Unlimited plan — coming soon
+          </span>
+        }
       />
     </Card>
   );

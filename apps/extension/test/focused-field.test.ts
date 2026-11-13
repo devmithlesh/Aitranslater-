@@ -62,12 +62,12 @@ afterEach(() => {
 
 describe('focus tracking', () => {
   it('reads a field that was already focused before the script loaded (no focus or input event)', async () => {
-    const box = editable('hi mithlesh kesa hai yr tu');
+    const box = editable('kal milte hai office ke baad');
     box.focus();
     // A fresh module copy has seen no events at all, like a content script injected after focus.
     vi.resetModules();
     const fresh = await import('../src/content/focused-field');
-    expect(fresh.readFocused()?.text).toBe('hi mithlesh kesa hai yr tu');
+    expect(fresh.readFocused()?.text).toBe('kal milte hai office ke baad');
     expect(fresh.readFocused()?.kind).toBe('contenteditable');
   });
 

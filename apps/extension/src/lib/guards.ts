@@ -1,17 +1,26 @@
 import type { ApiErrorCode, CustomAssistant, UserSettings } from '@verba/shared';
 import type { ExtensionState, StoredConnection } from '../shared/messages';
 
-const API_ERROR_CODES: readonly ApiErrorCode[] = [
-  'VALIDATION_ERROR',
-  'UNAUTHORIZED',
-  'NOT_FOUND',
-  'PAYLOAD_TOO_LARGE',
-  'RATE_LIMITED',
-  'NO_PROVIDER_CONFIGURED',
-  'PROVIDER_ERROR',
-  'PROVIDER_TIMEOUT',
-  'INTERNAL',
-];
+/**
+ * Every server error code. A Record (not an array) so adding a code to ApiErrorCode without listing it
+ * here is a compile error; an unlisted code would otherwise arrive as INTERNAL and break special cards
+ * such as CREDIT_LIMIT_REACHED.
+ */
+const API_ERROR_CODE_SET: Record<ApiErrorCode, true> = {
+  VALIDATION_ERROR: true,
+  UNAUTHORIZED: true,
+  FORBIDDEN: true,
+  NOT_FOUND: true,
+  CONFLICT: true,
+  PAYLOAD_TOO_LARGE: true,
+  RATE_LIMITED: true,
+  CREDIT_LIMIT_REACHED: true,
+  NO_PROVIDER_CONFIGURED: true,
+  PROVIDER_ERROR: true,
+  PROVIDER_TIMEOUT: true,
+  INTERNAL: true,
+};
+const API_ERROR_CODES = Object.keys(API_ERROR_CODE_SET) as readonly ApiErrorCode[];
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

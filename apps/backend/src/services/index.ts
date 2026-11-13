@@ -1,6 +1,7 @@
 import type { AppConfig } from '../config/env';
 import type { Storage } from '../storage/types';
 import { AdminService } from './admin.service';
+import { AuthService } from './auth.service';
 import { AiService } from './ai.service';
 import { CreditsService } from './credits.service';
 import { HistoryService } from './history.service';
@@ -22,6 +23,7 @@ export interface Services {
   credits: CreditsService;
   users: UsersService;
   admin: AdminService;
+  auth: AuthService;
 }
 
 /**
@@ -44,5 +46,6 @@ export function createServices(
   const credits = new CreditsService(storage, now);
   const users = new UsersService(storage, credits, now);
   const admin = new AdminService(storage, registry, usage, now);
-  return { settings, usage, history, registry, translation, ai, stats, credits, users, admin };
+  const auth = new AuthService(config, storage, credits, now);
+  return { settings, usage, history, registry, translation, ai, stats, credits, users, admin, auth };
 }

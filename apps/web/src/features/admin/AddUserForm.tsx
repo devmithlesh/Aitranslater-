@@ -1,27 +1,26 @@
 import { UserPlus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { Button, Card, CardHeader, ErrorState, Field, Input, useToast } from '@/components/ui';
-import { useAppSelector } from '@/store';
+import { checkEmail, checkName } from '@/features/auth/validation';
 import { useCreateUserMutation } from '@/store/api';
-import { buildConnectionCode, isLocalServerUrl, type RevealedCode } from './connectionCode';
 import { LimitInput } from './LimitInput';
 import { parseLimitInput } from './limits';
-
-const NAME_MAX = 60;
+import type { RevealedPassword } from './TemporaryPasswordReveal';
 
 export interface AddUserFormProps {
-  onCreated: (revealed: RevealedCode) => void;
+  onCreated: (revealed: RevealedPassword) => void;
   onCancel: () => void;
 }
 
-/** Inline (expandable) form to add a user. The token it returns is turned into a code and handed up once. */
+/** Inline (expandable) form to add an account. The temporary password it returns is handed up once. */
 export function AddUserForm({ onCreated, onCancel }: AddUserFormProps) {
   const toast = useToast();
-  const apiUrl = useAppSelector((s) => s.connection.apiUrl);
   const [createUser, { isLoading, reset }] = useCreateUserMutation();
   const [userName, setUserName] = useState('');
+  const [email, setEmail] = useState('');
   const [limit, setLimit] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
   const [limitError, setLimitError] = useState<string | null>(null);
   const [formError, setFormError] = useState<unknown>(null);
 
@@ -29,24 +28,22 @@ export function AddUserForm({ onCreated, onCancel }: AddUserFormProps) {
     event.preventDefault();
     if (isLoading) return;
 
-    const trimmed = userName.trim();
-    const nameMessage = trimmed === '' ? 'Enter a name.' : trimmed.length > NAME_MAX ? `Use ${NAME_MAX} characters or fewer.` : null;
+    const nameProblem = checkName(userName);
+    const emailProblem = checkEmail(email);
     const parsed = parseLimitInput(limit);
-    setNameError(nameMessage);
+    setNameError(nameProblem);
+    setEmailError(emailProblem);
     setLimitError(parsed.ok ? null : parsed.error);
     setFormError(null);
-    if (nameMessage || !parsed.ok) return;
+    if (nameProblem || emailProblem || !parsed.ok) return;
 
+    const trimmedName = userName.trim();
     try {
-      const result = await createUser({ name: trimmed, dailyLimit: parsed.value }).unwrap();
-      // Drop the token from RTK Query's mutation cache right away; only the code is kept, in component state.
+      const result = await createUser({ name: trimmedName, email: email.trim(), dailyLimit: parsed.value }).unwrap();
+      // Drop the password from RTK Query's mutation state right away; only component state keeps it.
       reset();
-      onCreated({
-        name: result.user.name,
-        code: buildConnectionCode(apiUrl, result.token),
-        local: isLocalServerUrl(apiUrl),
-      });
-      toast.success('User added', `Copy the connection code for ${result.user.name} now.`);
+      onCreated({ name: result.user.name, password: result.temporaryPassword });
+      toast.success('Account created', `Copy the temporary password for ${result.user.name} now.`);
     } catch (err) {
       setFormError(err);
     }
@@ -54,10 +51,14 @@ export function AddUserForm({ onCreated, onCancel }: AddUserFormProps) {
 
   return (
     <Card className="animate-slide-up">
-      <CardHeader icon={<UserPlus size={17} aria-hidden />} title="Add a user" description="You will get a connection code to send them. It is shown only once." />
+      <CardHeader
+        icon={<UserPlus size={17} aria-hidden />}
+        title="Add a user"
+        description="They sign in with this email and the temporary password, which is shown only once."
+      />
       <form onSubmit={submit} noValidate className="space-y-5 p-5">
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <Field label="Name" error={nameError} hint={`Up to ${NAME_MAX} characters.`}>
+          <Field label="Name" error={nameError} hint="Up to 60 characters.">
             {(id) => (
               <Input
                 id={id}
@@ -67,6 +68,22 @@ export function AddUserForm({ onCreated, onCancel }: AddUserFormProps) {
                 autoComplete="off"
                 autoFocus
                 invalid={!!nameError}
+              />
+            )}
+          </Field>
+          <Field label="Email" error={emailError} hint="Used to sign in.">
+            {(id) => (
+              <Input
+                id={id}
+                type="email"
+                inputMode="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                autoComplete="off"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="sara@example.com"
+                invalid={!!emailError}
               />
             )}
           </Field>

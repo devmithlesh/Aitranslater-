@@ -10,6 +10,9 @@ import { defineConfig } from 'vite';
  */
 export default defineConfig({
   root: 'src/pages',
+  // Read .env files from apps/extension (like the content and background builds), not from src/pages,
+  // so VITE_API_URL / VITE_DASHBOARD_URL are the same in every bundle.
+  envDir: fileURLToPath(new URL('.', import.meta.url)),
   publicDir: fileURLToPath(new URL('./public', import.meta.url)),
   base: '',
   plugins: [react()],

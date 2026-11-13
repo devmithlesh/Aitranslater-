@@ -58,22 +58,40 @@ create table if not exists public.extension_status (
   data jsonb not null
 );
 
--- Accounts created by the admin. token_hash is sha256 hex of the bearer token; the token is never stored.
+-- Email + password accounts (and Google-linked accounts). password_hash is an scrypt string, never the password.
+-- google_sub is the Google "sub" claim once linked. Both are unique; NULLs do not collide in Postgres.
 create table if not exists public.app_users (
   id text primary key,
   name text not null,
-  token_hash text not null unique,
+  email text unique not null,
+  password_hash text null,
+  google_sub text unique null,
+  role text not null default 'user' check (role in ('admin', 'user')),
+  plan text not null default 'free' check (plan in ('free', 'unlimited')),
+  must_change_password boolean not null default false,
   disabled boolean not null default false,
   daily_limit int null,
   created_at timestamptz not null default now(),
   last_used_at timestamptz null
 );
 
+-- Login sessions. token_hash is sha256 hex of the bearer token; the token itself is never stored.
+create table if not exists public.app_sessions (
+  id text primary key,
+  user_id text not null references public.app_users (id) on delete cascade,
+  token_hash text unique not null,
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null
+);
+create index if not exists app_sessions_user_id_idx on public.app_sessions (user_id);
+create index if not exists app_sessions_expires_at_idx on public.app_sessions (expires_at);
+
 -- Server-wide settings. Single row, always id = 'global'.
 create table if not exists public.app_config (
   id text primary key default 'global' check (id = 'global'),
   default_daily_limit int null,
-  provider_daily_quotas jsonb not null default '{}'::jsonb
+  provider_daily_quotas jsonb not null default '{}'::jsonb,
+  signups_enabled boolean not null default true
 );
 
 -- Translation credits per user. daily: "YYYY-MM-DD" -> count (backend keeps the last 62 days).
@@ -91,5 +109,6 @@ alter table public.usage_stats enable row level security;
 alter table public.activity_stats enable row level security;
 alter table public.extension_status enable row level security;
 alter table public.app_users enable row level security;
+alter table public.app_sessions enable row level security;
 alter table public.app_config enable row level security;
 alter table public.credit_ledgers enable row level security;

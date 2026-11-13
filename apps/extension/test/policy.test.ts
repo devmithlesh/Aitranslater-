@@ -95,4 +95,29 @@ describe('request parsing', () => {
       body: { text: 'hi' },
     });
   });
+
+  it('parses email sign-in and trims the email but keeps the password as typed', () => {
+    expect(
+      parseRequest({ type: 'verba:login', email: '  user@example.com ', password: ' pw with spaces ' }),
+    ).toEqual({
+      type: 'verba:login',
+      apiUrl: undefined,
+      email: 'user@example.com',
+      password: ' pw with spaces ',
+      dashboardUrl: undefined,
+    });
+    expect(
+      parseRequest({ type: 'verba:login', apiUrl: 'http://localhost:8787', email: 'a@b.co', password: 'x', dashboardUrl: 'http://localhost:5173' }),
+    ).toMatchObject({ apiUrl: 'http://localhost:8787', dashboardUrl: 'http://localhost:5173' });
+  });
+
+  it('rejects malformed or oversized login requests', () => {
+    expect(parseRequest({ type: 'verba:login', email: 'a@b.co' })).toBeNull();
+    expect(parseRequest({ type: 'verba:login', email: 42, password: 'x' })).toBeNull();
+    expect(parseRequest({ type: 'verba:login', email: '   ', password: 'x' })).toBeNull();
+    expect(parseRequest({ type: 'verba:login', email: 'a@b.co', password: '' })).toBeNull();
+    expect(parseRequest({ type: 'verba:login', email: `${'a'.repeat(250)}@b.co`, password: 'x' })).toBeNull();
+    expect(parseRequest({ type: 'verba:login', email: 'a@b.co', password: 'p'.repeat(201) })).toBeNull();
+    expect(parseRequest({ type: 'verba:login', email: 'a@b.co', password: 'p'.repeat(200) })).not.toBeNull();
+  });
 });

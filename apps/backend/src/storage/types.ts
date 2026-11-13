@@ -21,13 +21,21 @@ export interface UsageBucket {
   tokens?: number;
 }
 
-/** An account created by the admin. The admin itself is not stored here (it is VERBA_ACCESS_TOKEN). */
+/** An email + password account. The token admin ("local", VERBA_ACCESS_TOKEN) is not stored here. */
 export interface StoredUser {
   /** randomUUID(); never "local". */
   id: string;
   name: string;
-  /** sha256 hex of the user's bearer token. The token itself is never stored. */
-  tokenHash: string;
+  /** Trimmed + lower-cased; unique across accounts. */
+  email: string;
+  /** "scrypt$N$r$p$<saltB64>$<hashB64>" — see services/password.ts. null = Google-only account. Never the password itself. */
+  passwordHash: string | null;
+  /** Google account id ("sub" claim) once linked; unique. */
+  googleSub: string | null;
+  role: 'admin' | 'user';
+  plan: 'free' | 'unlimited';
+  /** Set by an admin password reset; cleared by change-password. */
+  mustChangePassword: boolean;
   disabled: boolean;
   /** null = follow StoredAppConfig.defaultDailyLimit. */
   dailyLimit: number | null;
@@ -35,8 +43,20 @@ export interface StoredUser {
   lastUsedAt: string | null;
 }
 
+/** A login session. The bearer token is never stored, only its SHA-256 hex. */
+export interface StoredSession {
+  /** randomUUID() */
+  id: string;
+  userId: string;
+  tokenHash: string;
+  createdAt: string;
+  expiresAt: string;
+}
+
 /** Server-wide settings managed by the admin. */
 export interface StoredAppConfig {
+  /** Optional for data written before signups existed: treat missing as true. */
+  signupsEnabled?: boolean;
   defaultDailyLimit: number | null;
   providerDailyQuotas: Record<string, number>;
 }
@@ -124,11 +144,21 @@ export interface Storage {
   // ── Accounts and credits ───────────────────────────────────────────
   listUsers(): Promise<StoredUser[]>;
   getUser(id: string): Promise<StoredUser | undefined>;
-  findUserByTokenHash(tokenHash: string): Promise<StoredUser | undefined>;
-  /** Insert or replace by id. */
+  /** `email` is already trimmed + lower-cased by the caller; exact match. */
+  findUserByEmail(email: string): Promise<StoredUser | undefined>;
+  findUserByGoogleSub(googleSub: string): Promise<StoredUser | undefined>;
+  /** Insert or replace by id. Callers guarantee email uniqueness (Supabase also enforces it). */
   saveUser(user: StoredUser): Promise<void>;
-  /** Removes the user AND all data stored under that userId (settings, assistants, history, usage, activity, extension status, credits). */
+  /** Removes the user AND all data stored under that userId (settings, assistants, history, usage, activity, extension status, credits, sessions). */
   deleteUser(id: string): Promise<boolean>;
+
+  saveSession(session: StoredSession): Promise<void>;
+  findSessionByTokenHash(tokenHash: string): Promise<StoredSession | undefined>;
+  deleteSession(id: string): Promise<void>;
+  /** Deletes every session of the user except `exceptSessionId`. Returns how many were removed. */
+  deleteUserSessions(userId: string, exceptSessionId?: string): Promise<number>;
+  /** Deletes sessions whose expiresAt is before `nowIso`. Returns how many were removed. */
+  pruneExpiredSessions(nowIso: string): Promise<number>;
 
   getAppConfig(): Promise<StoredAppConfig | undefined>;
   saveAppConfig(config: StoredAppConfig): Promise<void>;

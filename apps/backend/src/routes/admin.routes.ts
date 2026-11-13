@@ -9,7 +9,7 @@ export function createAdminRouter(services: Services): Router {
   router.get('/admin/users', ctrl.listUsers);
   router.post('/admin/users', ctrl.createUser);
   router.patch('/admin/users/:id', ctrl.updateUser);
-  router.post('/admin/users/:id/token', ctrl.regenerateToken);
+  router.post('/admin/users/:id/reset-password', ctrl.resetPassword);
   router.delete('/admin/users/:id', ctrl.deleteUser);
   router.get('/admin/config', ctrl.getConfig);
   router.put('/admin/config', ctrl.updateConfig);

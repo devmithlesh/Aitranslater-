@@ -1,24 +1,28 @@
-import type { UserView } from '@verba/shared';
-import { Ban, Pencil, Power, RefreshCw, Trash2 } from 'lucide-react';
+import type { UserPlan, UserView } from '@verba/shared';
+import { Ban, KeyRound, Pencil, Power, Trash2 } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { Badge, Button, useToast } from '@/components/ui';
-import { useAppSelector } from '@/store';
+import { Badge, Button, SegmentedControl, useToast } from '@/components/ui';
 import {
   errorMessage,
   useDeleteUserMutation,
-  useRegenerateUserTokenMutation,
+  useResetUserPasswordMutation,
   useUpdateUserMutation,
 } from '@/store/api';
 import { formatNumber, formatRelative } from '@/utils/format';
-import { buildConnectionCode, isLocalServerUrl, type RevealedCode } from './connectionCode';
 import { LimitInput } from './LimitInput';
 import { limitToInput, parseLimitInput } from './limits';
+import type { RevealedPassword } from './TemporaryPasswordReveal';
 
-type Confirm = 'delete' | 'regenerate' | null;
+type Confirm = 'delete' | 'reset' | null;
+
+const PLAN_OPTIONS = [
+  { value: 'free', label: 'Free' },
+  { value: 'unlimited', label: 'Unlimited' },
+] as const;
 
 export interface UserRowProps {
   user: UserView;
-  onRevealed: (revealed: RevealedCode) => void;
+  onRevealed: (revealed: RevealedPassword) => void;
 }
 
 function Figure({ label, children }: { label: string; children: ReactNode }) {
@@ -30,12 +34,11 @@ function Figure({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** One user: usage figures, limit override, and the account actions (regenerate, disable, delete). */
+/** One account: sign-in state badges, usage figures, plan and limit, and the account actions. */
 export function UserRow({ user, onRevealed }: UserRowProps) {
   const toast = useToast();
-  const apiUrl = useAppSelector((s) => s.connection.apiUrl);
   const [updateUser, { isLoading: updating }] = useUpdateUserMutation();
-  const [regenerate, { isLoading: regenerating, reset: resetRegenerate }] = useRegenerateUserTokenMutation();
+  const [resetPassword, { isLoading: resetting, reset: clearReset }] = useResetUserPasswordMutation();
   const [removeUser, { isLoading: deleting }] = useDeleteUserMutation();
 
   const [confirm, setConfirm] = useState<Confirm>(null);
@@ -43,7 +46,7 @@ export function UserRow({ user, onRevealed }: UserRowProps) {
   const [draft, setDraft] = useState('');
   const [draftError, setDraftError] = useState<string | null>(null);
 
-  const busy = updating || regenerating || deleting;
+  const busy = updating || resetting || deleting;
   const limitLabel = user.effectiveLimit === null ? 'Unlimited' : `${formatNumber(user.effectiveLimit)} per day`;
   const limitSource = user.dailyLimit === null ? 'default' : 'own limit';
   const todayLabel =
@@ -77,6 +80,16 @@ export function UserRow({ user, onRevealed }: UserRowProps) {
     void saveLimit(parsed.value);
   }
 
+  async function changePlan(plan: UserPlan) {
+    if (busy || plan === user.plan) return;
+    try {
+      await updateUser({ id: user.id, patch: { plan } }).unwrap();
+      toast.success(`${user.name} is on the ${plan === 'unlimited' ? 'Unlimited' : 'Free'} plan`);
+    } catch (err) {
+      toast.error(`Could not change ${user.name}'s plan`, errorMessage(err));
+    }
+  }
+
   async function toggleDisabled() {
     try {
       await updateUser({ id: user.id, patch: { disabled: !user.disabled } }).unwrap();
@@ -86,19 +99,15 @@ export function UserRow({ user, onRevealed }: UserRowProps) {
     }
   }
 
-  async function regenerateCode() {
+  async function resetUserPassword() {
     try {
-      const result = await regenerate(user.id).unwrap();
-      // Keep the token out of the RTK Query cache; the code lives only in the page's reveal state.
-      resetRegenerate();
+      const result = await resetPassword(user.id).unwrap();
+      // Keep the password out of the RTK Query cache; it lives only in the page's reveal state.
+      clearReset();
       setConfirm(null);
-      onRevealed({
-        name: result.user.name,
-        code: buildConnectionCode(apiUrl, result.token),
-        local: isLocalServerUrl(apiUrl),
-      });
+      onRevealed({ name: user.name, password: result.temporaryPassword });
     } catch (err) {
-      toast.error(`Could not regenerate ${user.name}'s code`, errorMessage(err));
+      toast.error(`Could not reset ${user.name}'s password`, errorMessage(err));
       setConfirm(null);
     }
   }
@@ -115,16 +124,23 @@ export function UserRow({ user, onRevealed }: UserRowProps) {
 
   return (
     <li className="min-w-0 space-y-4 p-4 sm:p-5">
-      <div className="flex min-w-0 flex-wrap items-center gap-2">
-        <h3 className="min-w-0 break-words text-[15px] font-semibold text-fg">{user.name}</h3>
-        {user.disabled && (
-          <Badge tone="danger" dot>
-            Disabled
+      <div className="min-w-0 space-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <h3 className="min-w-0 break-words text-[15px] font-semibold text-fg">{user.name}</h3>
+          {user.role === 'admin' && <Badge tone="brand">Admin</Badge>}
+          {user.disabled && (
+            <Badge tone="danger" dot>
+              Disabled
+            </Badge>
+          )}
+          {user.plan === 'unlimited' && <Badge tone="success">Unlimited</Badge>}
+          {user.hasGoogle && <Badge tone="neutral">Google</Badge>}
+          {user.mustChangePassword && <Badge tone="warning">Must change password</Badge>}
+          <Badge tone="neutral">
+            {limitLabel} · {limitSource}
           </Badge>
-        )}
-        <Badge tone="neutral">
-          {limitLabel} · {limitSource}
-        </Badge>
+        </div>
+        <p className="break-all text-[13px] text-muted">{user.email}</p>
       </div>
 
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -133,6 +149,17 @@ export function UserRow({ user, onRevealed }: UserRowProps) {
         <Figure label="All time">{formatNumber(user.totalUsed)}</Figure>
         <Figure label="Last used">{formatRelative(user.lastUsedAt)}</Figure>
       </dl>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="text-[13px] text-muted">Plan</span>
+        <SegmentedControl
+          ariaLabel={`${user.name}'s plan`}
+          size="sm"
+          options={PLAN_OPTIONS}
+          value={user.plan}
+          onChange={(plan) => void changePlan(plan)}
+        />
+      </div>
 
       {editing && (
         <form
@@ -167,19 +194,21 @@ export function UserRow({ user, onRevealed }: UserRowProps) {
       )}
 
       <div className="flex flex-wrap items-center gap-2">
-        {confirm === 'regenerate' ? (
+        {confirm === 'reset' ? (
           <>
-            <span className="min-w-0 text-[12.5px] text-muted">The old code stops working.</span>
-            <Button variant="danger" size="sm" icon={RefreshCw} loading={regenerating} onClick={() => void regenerateCode()}>
-              Confirm regenerate
+            <span className="min-w-0 text-[12.5px] text-muted">
+              They are signed out everywhere and must choose a new password.
+            </span>
+            <Button variant="danger" size="sm" icon={KeyRound} loading={resetting} onClick={() => void resetUserPassword()}>
+              Confirm reset
             </Button>
-            <Button variant="ghost" size="sm" disabled={regenerating} onClick={() => setConfirm(null)}>
+            <Button variant="ghost" size="sm" disabled={resetting} onClick={() => setConfirm(null)}>
               Cancel
             </Button>
           </>
         ) : (
-          <Button variant="outline" size="sm" icon={RefreshCw} disabled={busy} onClick={() => setConfirm('regenerate')}>
-            Regenerate code
+          <Button variant="outline" size="sm" icon={KeyRound} disabled={busy} onClick={() => setConfirm('reset')}>
+            Reset password
           </Button>
         )}
 

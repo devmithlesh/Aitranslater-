@@ -2,9 +2,21 @@ import { Languages, PenLine, ShieldCheck, type LucideIcon } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
 const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
-  { icon: Languages, title: 'Translate anywhere', body: 'Natural, tone-aware translation in the dashboard and on any web page.' },
-  { icon: PenLine, title: 'Fix & rewrite in place', body: 'Grammar fixes, rewrites and smart replies right where you type.' },
-  { icon: ShieldCheck, title: 'Private & self-hostable', body: 'Run the backend yourself. Your keys and history stay on your server.' },
+  {
+    icon: Languages,
+    title: 'Type in any language — get English in every tone',
+    body: 'Romanized text such as Hinglish is understood too. Several tones come back in one go.',
+  },
+  {
+    icon: PenLine,
+    title: 'Works in any text box with the Chrome extension',
+    body: 'Translate, fix grammar and draft replies right where you type.',
+  },
+  {
+    icon: ShieldCheck,
+    title: 'Free daily translations · Unlimited plan coming soon',
+    body: 'Every account gets a daily limit on the free plan.',
+  },
 ];
 
 /** Left-hand brand story on desktop. Decorative only; the form carries the content. */

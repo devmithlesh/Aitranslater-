@@ -1,4 +1,5 @@
 import { adminConfigUpdateSchema, createUserSchema, updateUserSchema } from '../schemas';
+import { getAuth } from '../middleware/auth';
 import { parseOrThrow } from '../middleware/validate';
 import type { Services } from '../services';
 import { asyncHandler } from '../utils/request';
@@ -17,15 +18,15 @@ export function createAdminController(services: Services) {
 
     updateUser: asyncHandler(async (req, res) => {
       const patch = parseOrThrow(updateUserSchema, req.body);
-      res.json(await services.users.update(req.params.id, patch));
+      res.json(await services.users.update(req.params.id, patch, getAuth(res)));
     }),
 
-    regenerateToken: asyncHandler(async (req, res) => {
-      res.json(await services.users.regenerateToken(req.params.id));
+    resetPassword: asyncHandler(async (req, res) => {
+      res.json(await services.users.resetPassword(req.params.id, getAuth(res)));
     }),
 
     deleteUser: asyncHandler(async (req, res) => {
-      await services.users.remove(req.params.id);
+      await services.users.remove(req.params.id, getAuth(res));
       res.status(204).end();
     }),
 

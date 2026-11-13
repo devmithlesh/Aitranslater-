@@ -7,11 +7,15 @@ import { vi } from 'vitest';
 import { createApp } from '../src/app';
 import { loadConfig } from '../src/config/env';
 import { FileStorage } from '../src/storage/file-storage';
+import { ensureAdminAccount } from '../src/services/auth.service';
 import { parseEncryptionKey } from '../src/utils/crypto';
 
 export const TEST_TOKEN = 'vrb_test_token_0123456789abcdef';
 export const TEST_KEY_HEX = '11'.repeat(32);
 export const AUTH = { Authorization: `Bearer ${TEST_TOKEN}` };
+
+/** The password a test account chooses after its temporary one (see createUserAccount). */
+export const CHOSEN_PASSWORD = 'chosen-password-1';
 
 export interface Harness {
   app: Express;
@@ -21,11 +25,14 @@ export interface Harness {
 }
 
 export interface HarnessOptions {
-  /** Pins the server clock (day boundaries, credit resets). Defaults to the real clock. */
+  /** Pins the server clock (day boundaries, credit resets, session expiry). Defaults to the real clock. */
   now?: () => Date;
 }
 
-/** Builds an app over a throwaway data directory. Rate limits are set high so tests never hit them. */
+/**
+ * Builds an app over a throwaway data directory. Rate limits are set high so tests never hit them unless a
+ * test lowers them on purpose. ADMIN_EMAIL / ADMIN_PASSWORD in `env` seed an admin account, as boot does.
+ */
 export async function createHarness(env: Record<string, string> = {}, options: HarnessOptions = {}): Promise<Harness> {
   const dir = mkdtempSync(join(tmpdir(), 'verba-test-'));
   const config = loadConfig({
@@ -34,10 +41,12 @@ export async function createHarness(env: Record<string, string> = {}, options: H
     VERBA_ENCRYPTION_KEY: TEST_KEY_HEX,
     RATE_LIMIT_PER_MINUTE: '10000',
     RATE_LIMIT_AI_PER_MINUTE: '10000',
+    AUTH_RATE_LIMIT_PER_15_MIN: '10000',
     ...env,
   });
   const storage = new FileStorage(dir);
   await storage.init();
+  await ensureAdminAccount(storage, config, options.now);
   const app = createApp({
     config,
     storage,
@@ -66,23 +75,47 @@ export function mockFetch(handler: (url: string, init: RequestInit | undefined) 
   return fn;
 }
 
-export function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+export function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { 'Content-Type': 'application/json', ...headers },
+  });
 }
 
 export function unexpectedUrl(url: string): never {
   throw new Error(`Unexpected network call in test: ${url}`);
 }
 
-/** Creates a user through the admin API. Returns the new id and the one-time token. */
+export const as = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+let accountCounter = 0;
+
+/**
+ * Creates an account through the admin API, signs in with its temporary password, and chooses
+ * CHOSEN_PASSWORD. The returned token is a live session with mustChangePassword cleared.
+ */
 export async function createUserAccount(
   app: Express,
-  body: { name?: string; dailyLimit?: number | null } = {},
-): Promise<{ id: string; token: string }> {
-  const res = await request(app)
+  body: { name?: string; email?: string; dailyLimit?: number | null } = {},
+): Promise<{ id: string; email: string; password: string; token: string }> {
+  accountCounter += 1;
+  const email = body.email ?? `member${accountCounter}@example.com`;
+  const created = await request(app)
     .post('/api/admin/users')
     .set(AUTH)
-    .send({ name: 'Test user', ...body });
-  if (res.status !== 201) throw new Error(`Could not create a test user (HTTP ${res.status}).`);
-  return { id: res.body.user.id as string, token: res.body.token as string };
+    .send({ name: 'Test user', ...body, email });
+  if (created.status !== 201) throw new Error(`Could not create a test user (HTTP ${created.status}).`);
+  const temporaryPassword = created.body.temporaryPassword as string;
+
+  const login = await request(app).post('/api/auth/login').send({ email, password: temporaryPassword });
+  if (login.status !== 200) throw new Error(`Could not sign in the test user (HTTP ${login.status}).`);
+  const token = login.body.token as string;
+
+  const changed = await request(app)
+    .post('/api/auth/change-password')
+    .set(as(token))
+    .send({ currentPassword: temporaryPassword, newPassword: CHOSEN_PASSWORD });
+  if (changed.status !== 204) throw new Error(`Could not change the test password (HTTP ${changed.status}).`);
+
+  return { id: created.body.user.id as string, email, password: CHOSEN_PASSWORD, token };
 }
