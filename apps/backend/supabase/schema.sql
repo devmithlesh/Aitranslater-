@@ -1,0 +1,95 @@
+-- Verba backend schema for STORAGE=supabase.
+-- Run once in the Supabase SQL editor. The backend connects with the service-role key,
+-- which bypasses RLS; RLS is enabled with no public policies so anon/authenticated
+-- clients can read nothing.
+
+create table if not exists public.user_settings (
+  user_id text primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.custom_assistants (
+  id text primary key,
+  user_id text not null,
+  data jsonb not null,
+  created_at timestamptz not null default now()
+);
+create index if not exists custom_assistants_user_created_idx
+  on public.custom_assistants (user_id, created_at);
+
+create table if not exists public.history_items (
+  id text primary key,
+  user_id text not null,
+  type text not null,
+  favorite boolean not null default false,
+  input text not null,
+  output text not null,
+  meta jsonb not null default '{}'::jsonb,
+  client text not null check (client in ('web', 'extension')),
+  created_at timestamptz not null default now()
+);
+create index if not exists history_items_user_created_idx
+  on public.history_items (user_id, created_at desc);
+create index if not exists history_items_user_favorite_idx
+  on public.history_items (user_id, favorite);
+
+create table if not exists public.provider_configs (
+  user_id text not null,
+  provider_id text not null,
+  data jsonb not null,
+  primary key (user_id, provider_id)
+);
+
+create table if not exists public.usage_stats (
+  user_id text not null,
+  provider_id text not null,
+  data jsonb not null,
+  primary key (user_id, provider_id)
+);
+
+create table if not exists public.activity_stats (
+  user_id text primary key,
+  data jsonb not null
+);
+
+create table if not exists public.extension_status (
+  user_id text primary key,
+  data jsonb not null
+);
+
+-- Accounts created by the admin. token_hash is sha256 hex of the bearer token; the token is never stored.
+create table if not exists public.app_users (
+  id text primary key,
+  name text not null,
+  token_hash text not null unique,
+  disabled boolean not null default false,
+  daily_limit int null,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz null
+);
+
+-- Server-wide settings. Single row, always id = 'global'.
+create table if not exists public.app_config (
+  id text primary key default 'global' check (id = 'global'),
+  default_daily_limit int null,
+  provider_daily_quotas jsonb not null default '{}'::jsonb
+);
+
+-- Translation credits per user. daily: "YYYY-MM-DD" -> count (backend keeps the last 62 days).
+create table if not exists public.credit_ledgers (
+  user_id text primary key,
+  daily jsonb not null default '{}'::jsonb,
+  total int not null default 0
+);
+
+alter table public.user_settings enable row level security;
+alter table public.custom_assistants enable row level security;
+alter table public.history_items enable row level security;
+alter table public.provider_configs enable row level security;
+alter table public.usage_stats enable row level security;
+alter table public.activity_stats enable row level security;
+alter table public.extension_status enable row level security;
+alter table public.app_users enable row level security;
+alter table public.app_config enable row level security;
+alter table public.credit_ledgers enable row level security;

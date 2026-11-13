@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+release/
+*.zip
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+.DS_Store
+# Backend local data (history, encrypted provider keys, generated secrets)
+apps/backend/data/

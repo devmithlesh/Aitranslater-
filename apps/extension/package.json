@@ -1,0 +1,37 @@
+{
+  "name": "@verba/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "icons": "node scripts/generate-icons.mjs",
+    "build:pages": "vite build -c vite.config.ts",
+    "build:content": "vite build -c vite.content.config.ts",
+    "build:background": "vite build -c vite.background.config.ts",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && npm run icons && tsc -p tsconfig.json && npm run build:pages && npm run build:content && npm run build:background",
+    "dev": "concurrently -n pages,content,bg \"vite build -c vite.config.ts --watch\" \"vite build -c vite.content.config.ts --watch\" \"vite build -c vite.background.config.ts --watch\"",
+    "package": "npm run build && node scripts/package.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.1.0",
+    "@verba/shared": "*",
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "jsdom": "^25.0.1",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.5"
+  }
+}

@@ -1,0 +1,85 @@
+import cors from 'cors';
+import type { CorsOptions } from 'cors';
+import express from 'express';
+import type { Express } from 'express';
+import helmet from 'helmet';
+import { CLIENT_HEADER } from '@verba/shared';
+import type { AppConfig } from './config/env';
+import { createAuthMiddleware } from './middleware/auth';
+import { errorHandler, notFoundHandler } from './middleware/error-handler';
+import { createRateLimiters } from './middleware/rate-limit';
+import { createAdminRouter } from './routes/admin.routes';
+import { createAiRouter } from './routes/ai.routes';
+import { createAssistantsRouter } from './routes/assistants.routes';
+import { createAuthRouter } from './routes/auth.routes';
+import { createExtensionRouter } from './routes/extension.routes';
+import { createHealthRouter } from './routes/health.routes';
+import { createHistoryRouter } from './routes/history.routes';
+import { createProvidersRouter } from './routes/providers.routes';
+import { createSettingsRouter } from './routes/settings.routes';
+import { createStatsRouter } from './routes/stats.routes';
+import { createServices } from './services';
+import type { Storage } from './storage/types';
+
+export interface AppDeps {
+  config: AppConfig;
+  storage: Storage;
+  accessToken: string;
+  encryptionKey: Buffer;
+  /** Clock for day boundaries (credits, usage). Tests inject a fixed one. */
+  now?: () => Date;
+}
+
+const EXTENSION_PREFIX = 'chrome-extension://';
+
+/** Requests without an Origin (curl, server-to-server) are allowed; browsers are checked against the lists. */
+export function isOriginAllowed(origin: string | undefined, config: AppConfig): boolean {
+  if (!origin) return true;
+  if (config.corsOrigins.includes(origin)) return true;
+  if (!origin.startsWith(EXTENSION_PREFIX)) return false;
+  if (!config.allowExtensionOrigins) return false;
+  if (!config.extensionIds) return true;
+  const id = origin.slice(EXTENSION_PREFIX.length).replace(/\/+$/, '');
+  return config.extensionIds.includes(id);
+}
+
+function corsOptions(config: AppConfig): CorsOptions {
+  return {
+    origin: (origin, callback) => callback(null, isOriginAllowed(origin, config)),
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Authorization', 'Content-Type', CLIENT_HEADER],
+  };
+}
+
+export function createApp(deps: AppDeps): Express {
+  const { config, storage } = deps;
+  const services = createServices(config, storage, deps.encryptionKey, deps.now);
+  const limiters = createRateLimiters(config);
+
+  const app = express();
+  app.disable('x-powered-by');
+  app.set('trust proxy', config.trustProxy);
+  // Cross-origin must be allowed so the dashboard and extension can read responses.
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+  app.use(cors(corsOptions(config)));
+  app.use(express.json({ limit: '64kb' }));
+
+  const api = express.Router();
+  api.use(limiters.general);
+  api.use(createHealthRouter(storage.kind));
+  api.use(createAuthMiddleware({ adminToken: deps.accessToken, storage }));
+  api.use(createAuthRouter(storage.kind, services));
+  api.use(createAdminRouter(services));
+  api.use(createAiRouter(services, limiters.ai));
+  api.use(createAssistantsRouter(services));
+  api.use(createHistoryRouter(services));
+  api.use(createSettingsRouter(services));
+  api.use(createProvidersRouter(services));
+  api.use(createStatsRouter(services));
+  api.use(createExtensionRouter(services));
+  api.use(notFoundHandler);
+
+  app.use('/api', api);
+  app.use(errorHandler);
+  return app;
+}

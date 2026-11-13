@@ -1,0 +1,39 @@
+{
+  "name": "verba",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Verba — personal AI writing & translation assistant (web dashboard, Chrome extension, backend API)",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "concurrently -n api,web -c magenta,cyan \"npm:dev:backend\" \"npm:dev:web\"",
+    "dev:backend": "npm run dev -w @verba/backend",
+    "dev:web": "npm run dev -w @verba/web",
+    "dev:extension": "npm run dev -w @verba/extension",
+    "build": "npm run build -w @verba/backend && npm run build -w @verba/web && npm run build -w @verba/extension",
+    "build:extension": "npm run build -w @verba/extension",
+    "package:extension": "npm run package -w @verba/extension",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint ."
+  },
+  "overrides": {
+    "rollup": "npm:@rollup/wasm-node@^4.27.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "concurrently": "^9.1.0",
+    "eslint": "^9.14.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "globals": "^15.12.0",
+    "rollup": "npm:@rollup/wasm-node@^4.27.0",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.14.0"
+  }
+}

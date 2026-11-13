@@ -1,0 +1,57 @@
+import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
+import { normalizeApiUrl } from '@verba/shared';
+
+const STORAGE_KEY = 'verba.connection';
+export const DEFAULT_API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL ?? 'http://localhost:8787');
+
+export interface ConnectionState {
+  apiUrl: string;
+  token: string | null;
+  /** Set when the backend rejects the stored token, so the app can route to /connect. */
+  unauthorized: boolean;
+}
+
+function load(): ConnectionState {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw) as Partial<ConnectionState>;
+      if (typeof parsed.apiUrl === 'string') {
+        return { apiUrl: parsed.apiUrl, token: parsed.token ?? null, unauthorized: false };
+      }
+    }
+  } catch {
+    /* storage unavailable or corrupt — fall back to defaults */
+  }
+  return { apiUrl: DEFAULT_API_URL, token: null, unauthorized: false };
+}
+
+export function persistConnection(state: ConnectionState): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ apiUrl: state.apiUrl, token: state.token }));
+  } catch {
+    /* ignore */
+  }
+}
+
+const connectionSlice = createSlice({
+  name: 'connection',
+  initialState: load,
+  reducers: {
+    connected(state, action: PayloadAction<{ apiUrl: string; token: string }>) {
+      state.apiUrl = normalizeApiUrl(action.payload.apiUrl);
+      state.token = action.payload.token;
+      state.unauthorized = false;
+    },
+    disconnected(state) {
+      state.token = null;
+      state.unauthorized = false;
+    },
+    tokenRejected(state) {
+      state.unauthorized = true;
+    },
+  },
+});
+
+export const { connected, disconnected, tokenRejected } = connectionSlice.actions;
+export default connectionSlice.reducer;
