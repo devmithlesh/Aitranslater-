@@ -16,8 +16,10 @@ function load(): ConnectionState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw) as Partial<ConnectionState>;
-      if (typeof parsed.apiUrl === 'string') {
-        return { apiUrl: parsed.apiUrl, token: parsed.token ?? null, unauthorized: false };
+      // A saved server URL only matters together with a token. Signed out, always use this build's
+      // server (VITE_API_URL), so a stale saved URL (e.g. localhost from an earlier build) can't break login.
+      if (typeof parsed.apiUrl === 'string' && typeof parsed.token === 'string' && parsed.token) {
+        return { apiUrl: parsed.apiUrl, token: parsed.token, unauthorized: false };
       }
     }
   } catch {
@@ -46,6 +48,8 @@ const connectionSlice = createSlice({
     disconnected(state) {
       state.token = null;
       state.unauthorized = false;
+      // Back to this build's server, so the login page never talks to a previous custom/stale URL.
+      state.apiUrl = DEFAULT_API_URL;
     },
     tokenRejected(state) {
       state.unauthorized = true;
