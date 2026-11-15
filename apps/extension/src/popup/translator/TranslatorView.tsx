@@ -242,9 +242,10 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
           <div role="alert" className="flex gap-2.5 rounded-xl border border-danger/20 bg-danger-soft p-3 text-fg animate-fade-in">
             <KeyRound size={16} className="mt-0.5 shrink-0 text-danger" aria-hidden />
             <div className="min-w-0 flex-1 text-[12.5px]">
-              <p className="font-medium">Add a free AI key (Gemini or Groq) in the Verba dashboard → AI provider settings.</p>
+              <p className="font-medium">Translation isn't set up on this server yet.</p>
+              <p className="mt-0.5 text-muted">Please let the Verba admin know. Admins: add an AI key in the dashboard.</p>
               <Button variant="outline" size="sm" icon={ExternalLink} className="mt-2" onClick={() => void openProviders()}>
-                Open AI provider settings
+                Admin: AI provider settings
               </Button>
               {dashboardFailed && <p className="mt-1 text-danger">Could not open that page. Try again.</p>}
             </div>

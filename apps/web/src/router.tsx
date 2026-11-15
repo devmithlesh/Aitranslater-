@@ -7,6 +7,7 @@ import { useMeQuery } from '@/store/api';
 import { RouteError } from '@/pages/RouteError';
 import LoginPage from '@/pages/LoginPage';
 import SignupPage from '@/pages/SignupPage';
+import PrivacyPage from '@/pages/PrivacyPage';
 import { RequireAdmin } from '@/features/admin/RequireAdmin';
 import { readFromState } from '@/features/auth/redirect';
 
@@ -78,6 +79,8 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
   },
   { path: '/connect', element: <ConnectPage />, errorElement: <RouteError /> },
+  // Public: linked from the Chrome Web Store listing, readable without an account.
+  { path: '/privacy', element: <PrivacyPage />, errorElement: <RouteError /> },
   {
     path: '/',
     element: (
