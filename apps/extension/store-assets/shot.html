@@ -1,0 +1,70 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box}
+html,body{margin:0;width:1280px;height:800px;overflow:hidden;font-family:"Segoe UI",Inter,Arial,sans-serif}
+body{background:linear-gradient(135deg,#7c3aed 0%,#2563eb 100%);display:flex;align-items:center;padding:0 60px;gap:50px;color:#fff}
+.copy{width:380px;flex:none}
+.copy .brand{display:flex;align-items:center;gap:12px;font-size:26px;font-weight:700;margin-bottom:26px}
+.mark{width:44px;height:44px;border-radius:12px;background:rgba(255,255,255,.18);border:1.5px solid rgba(255,255,255,.4);display:flex;align-items:center;justify-content:center}
+h1{font-size:44px;line-height:1.12;margin:0 0 18px;letter-spacing:-.8px}
+.copy p{font-size:19px;line-height:1.5;opacity:.92;margin:0 0 26px}
+.steps{list-style:none;padding:0;margin:0;font-size:16px}
+.steps li{display:flex;gap:12px;align-items:center;margin-bottom:12px}
+.steps b{width:28px;height:28px;border-radius:99px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:14px;flex:none}
+.browser{position:relative;flex:1;height:620px;background:#f4f5f8;border-radius:14px;box-shadow:0 30px 70px rgba(15,10,60,.45);overflow:hidden;color:#1f2330}
+.bar{height:44px;background:#e6e8ee;display:flex;align-items:center;gap:8px;padding:0 14px}
+.dot{width:12px;height:12px;border-radius:99px}
+.url{margin-left:14px;flex:1;height:26px;border-radius:99px;background:#fff;font-size:13px;color:#667;display:flex;align-items:center;padding-left:14px}
+.ext{width:26px;height:26px;border-radius:7px;background:linear-gradient(135deg,#7c3aed,#2563eb);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(124,58,237,.35)}
+.chat{position:absolute;left:0;top:44px;bottom:0;width:100%;padding:24px 28px}
+.chat h4{margin:0 0 18px;font-size:15px;color:#555}
+.msg{max-width:300px;padding:10px 14px;border-radius:14px;font-size:14px;line-height:1.4;margin-bottom:10px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.msg.me{margin-left:auto;background:#dbe7ff}
+.compose{position:absolute;left:28px;right:28px;bottom:24px;height:52px;background:#fff;border-radius:26px;border:2px solid #7c3aed;display:flex;align-items:center;padding:0 20px;font-size:15px}
+.popup{position:absolute;right:18px;top:52px;width:380px;background:#0f1117;color:#e8e9ef;border-radius:14px;box-shadow:0 20px 50px rgba(0,0,0,.45);padding:16px;font-size:13px}
+.ph{display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;margin-bottom:12px}
+.ph .m{width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#7c3aed,#2563eb);display:flex;align-items:center;justify-content:center}
+.ph .cr{margin-left:auto;font-size:11px;color:#8b8fa3;font-weight:400}
+.hint{font-size:11.5px;color:#8b8fa3;margin-bottom:8px}
+.sel{border:1px solid #2a2e3b;background:#171a23;border-radius:9px;padding:8px 10px;margin-bottom:8px;display:flex;justify-content:space-between}
+.ta{border:1px solid #2a2e3b;background:#171a23;border-radius:9px;padding:9px 10px;height:62px;line-height:1.4;margin-bottom:10px}
+.row{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.kbd{font-size:10.5px;color:#8b8fa3}.kbd span{border:1px solid #2a2e3b;border-radius:4px;padding:1px 5px;margin-right:3px}
+.btn{background:linear-gradient(135deg,#7c3aed,#4f46e5);color:#fff;border-radius:9px;padding:7px 14px;font-weight:600;font-size:12.5px}
+.btn.o{background:transparent;border:1px solid #2a2e3b;color:#e8e9ef}
+.lbl{display:flex;justify-content:space-between;align-items:center;font-size:10.5px;font-weight:700;letter-spacing:.06em;color:#8b8fa3;margin-bottom:5px}
+.badge{font-size:10.5px;letter-spacing:0;font-weight:600;color:#c4b5fd;background:rgba(124,58,237,.2);border-radius:99px;padding:2px 8px}
+.mean{font-size:12.5px;color:#b5b8c6;line-height:1.45;margin-bottom:12px}
+.tabs{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:8px}
+.tabs span{font-size:11.5px;padding:4px 10px;border-radius:99px;border:1px solid #2a2e3b;color:#b5b8c6}
+.tabs .on{background:#7c3aed;border-color:#7c3aed;color:#fff}
+.out{background:#171a23;border:1px solid #2a2e3b;border-radius:9px;padding:10px;line-height:1.45;font-size:13.5px;margin-bottom:10px;color:#fff}
+.acts{display:flex;justify-content:flex-end;gap:8px}
+</style></head><body>
+<div class="copy">
+ <div class="brand"><div class="mark"><svg width="26" height="26" viewBox="0 0 96 96"><path d="M24 24 L48 74 L72 24" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Verba</div>
+ <h1>Write in your language. Send it in perfect English.</h1>
+ <p>Type in any text box, open Verba, pick a tone and insert the translation back.</p>
+ <ul class="steps"><li><b>1</b>Type in any box on any website</li><li><b>2</b>Press Alt+Shift+V</li><li><b>3</b>Choose a tone and click Insert</li></ul>
+</div>
+<div class="browser">
+ <div class="bar"><div class="dot" style="background:#ff5f57"></div><div class="dot" style="background:#febc2e"></div><div class="dot" style="background:#28c840"></div><div class="url">chat.example.com</div>
+ <div class="ext"><svg width="15" height="15" viewBox="0 0 96 96"><path d="M24 24 L48 74 L72 24" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg></div></div>
+ <div class="chat"><h4>Team chat</h4>
+  <div class="msg">Can you share the report today?</div>
+  <div class="msg me">Sure, give me a bit.</div>
+  <div class="compose">kal tak report bhej dunga, thoda late ho gaya</div>
+ </div>
+ <div class="popup">
+  <div class="ph"><div class="m"><svg width="13" height="13" viewBox="0 0 96 96"><path d="M24 24 L48 74 L72 24" fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/></svg></div>Verba<span class="cr">48 credits left</span></div>
+  <div class="hint">From the box on chat.example.com</div>
+  <div class="sel"><span>Translate to: English</span><span style="color:#8b8fa3">▾</span></div>
+  <div class="ta">kal tak report bhej dunga, thoda late ho gaya</div>
+  <div class="row"><span class="kbd"><span>Ctrl</span><span>Enter</span></span><span class="btn">Translate</span></div>
+  <div class="lbl">WHAT IT MEANS <span class="badge">Hindi · romanized</span></div>
+  <div class="mean">The writer says they will send the report by tomorrow because it got a little delayed.</div>
+  <div class="tabs"><span>Natural</span><span class="on">Professional</span><span>Casual</span><span>Polite</span><span>Funny</span><span>Formal</span></div>
+  <div class="out">Apologies for the delay. I'll send the report over by tomorrow.</div>
+  <div class="acts"><span class="btn o">Copy</span><span class="btn">Insert</span></div>
+ </div>
+</div>
+</body></html>
