@@ -1,7 +1,9 @@
 import {
   AUTO_LANGUAGE,
+  HINGLISH,
   languageName,
   type AssistantToolId,
+  type ExplainLanguage,
   type ReplyLength,
   type ReplyStyle,
   type RewriteStyle,
@@ -192,6 +194,37 @@ export function buildSummarizePrompt(args: { text: string; format: SummaryFormat
     SUMMARY_INSTRUCTIONS[args.format],
     'Write the summary in the same language as the text.',
     OUTPUT_RULE,
+    DATA_RULE,
+  ].join('\n');
+  return { system, prompt: wrapUserText(args.text) };
+}
+
+/** Output-language line for POST /api/explain. Hinglish is Hindi in Latin letters, the way people chat in India. */
+function explainLanguageInstruction(language: ExplainLanguage): string {
+  if (language === HINGLISH) {
+    return "Write in Hinglish: Hindi written in Latin (Roman) letters mixed naturally with common English words, the way people chat in India (e.g. 'Iska matlab hai ki company ne profit kamaya'). Do not use Devanagari script.";
+  }
+  if (language === 'en') return 'Write in simple, plain English (about a 12-year-old\'s reading level).';
+  return `Write in simple, everyday ${languageName(language)} using its native script; keep common technical terms in English where natural.`;
+}
+
+/** Explains selected text to a reader with no background knowledge. Output is plain text, not Markdown. */
+export function buildExplainPrompt(args: { text: string; language: ExplainLanguage }): Prompt {
+  const headingNote =
+    args.language === HINGLISH
+      ? 'Use the headings exactly as written below.'
+      : 'Write the three headings below translated into the output language, keeping the bold markers.';
+  const system = [
+    'You are a friendly teacher explaining the text inside <text> to someone with no background knowledge.',
+    'Be accurate. Never invent facts that are not in the text. If something is unclear or ambiguous, say so.',
+    explainLanguageInstruction(args.language),
+    'Output format (plain text, no code fences, no preamble such as "Sure"). ' + headingNote,
+    '- First line: "**In short:** " followed by 1 to 2 sentences with the core meaning.',
+    '- Then a line "**Key points:**" followed by 2 to 5 lines, each starting with "- ".',
+    '- Only if the text contains jargon, technical or difficult words: a line "**Difficult words:**" followed by lines like "- word: simple meaning".',
+    'If the text is tabular data (CSV rows, a table, numbers in columns), explain what the columns mean and what the data shows (trends, highest and lowest values) instead of reading every row.',
+    'If the text is code, explain step by step in simple words what it does.',
+    'Keep it short: aim for under 180 words unless the text is very long.',
     DATA_RULE,
   ].join('\n');
   return { system, prompt: wrapUserText(args.text) };

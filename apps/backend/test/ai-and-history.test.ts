@@ -86,6 +86,40 @@ describe('AI tools', () => {
     expect(history.body.items[0].meta.toolId).toBe('summarize');
   });
 
+  it('explains text in Hinglish by default and records it as explain activity', async () => {
+    const fetchMock = mockFetch((url) =>
+      url.includes('generativelanguage.googleapis.com')
+        ? geminiText('**In short:** Company ne profit kamaya.')
+        : unexpectedUrl(url),
+    );
+    const res = await request(h.app).post('/api/explain').set(AUTH).send({ text: 'Q3 revenue rose 12%.' });
+    expect(res.status).toBe(200);
+    expect(res.body.result).toBe('**In short:** Company ne profit kamaya.');
+    expect(res.body.provider).toBe('gemini');
+
+    const sent = String(fetchMock.mock.calls[0][1]?.body);
+    expect(sent).toContain('Write in Hinglish');
+
+    const history = await request(h.app).get('/api/history?type=assistant').set(AUTH);
+    expect(history.body.items[0].meta.toolId).toBe('explain');
+  });
+
+  it('explains text in a supported language code such as Tamil', async () => {
+    mockFetch((url) => (url.includes('generativelanguage.googleapis.com') ? geminiText('**In short:** சுருக்கம்.') : unexpectedUrl(url)));
+    const res = await request(h.app).post('/api/explain').set(AUTH).send({ text: 'Hello', language: 'ta' });
+    expect(res.status).toBe(200);
+  });
+
+  it('rejects an unsupported explain language', async () => {
+    const res = await request(h.app).post('/api/explain').set(AUTH).send({ text: 'Hello', language: 'klingon' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects empty explain text', async () => {
+    const res = await request(h.app).post('/api/explain').set(AUTH).send({ text: '   ' });
+    expect(res.status).toBe(400);
+  });
+
   it('requires a prompt for the custom tool', async () => {
     const res = await request(h.app).post('/api/ai-assistant').set(AUTH).send({ text: 'Hi', toolId: 'custom' });
     expect(res.status).toBe(400);

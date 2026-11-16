@@ -10,6 +10,7 @@ import {
   type FocusedFieldInfo,
   type InsertResult,
   type PageBridge,
+  type SelectionInfo,
 } from '../shared/page-bridge';
 import { activeChain, isSensitiveField, fieldOf, nativeValueSetter, pasteText, selectionFor } from './input-handler';
 import { isActiveHere } from './state';
@@ -240,9 +241,38 @@ export function startFocusTracking(): void {
   }
 }
 
+/**
+ * The text the user highlighted in this frame. Inside an input/textarea the document selection is
+ * empty, so the field's own selection range is used. Sensitive fields are never read.
+ */
+export function readSelection(): SelectionInfo | null {
+  try {
+    if (!isActiveHere()) return null;
+    const chain = activeChain();
+    const deepest = chain?.[chain.length - 1];
+
+    let raw = '';
+    const field = deepest ? fieldOf(deepest) : null;
+    if (deepest && isSensitiveTarget(deepest)) return null;
+    if (field && field.selectionStart !== null && field.selectionEnd !== null) {
+      raw = field.value.slice(field.selectionStart, field.selectionEnd);
+    }
+    if (!raw.trim()) {
+      const sel = deepest ? selectionFor(deepest) : window.getSelection();
+      raw = sel?.toString() ?? '';
+    }
+
+    const text = raw.trim();
+    if (!text) return null;
+    return { text: text.slice(0, MAX_FIELD_TEXT), site: location.hostname };
+  } catch {
+    return null;
+  }
+}
+
 /** Publishes the bridge on globalThis in the isolated world, where only Verba's own code can reach it. */
 export function installPageBridge(): void {
-  const bridge: PageBridge = { readFocused, insert };
+  const bridge: PageBridge = { readFocused, readSelection, insert };
   try {
     Object.defineProperty(globalThis, PAGE_BRIDGE_KEY, { value: bridge, configurable: true });
   } catch {

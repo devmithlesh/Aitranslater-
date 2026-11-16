@@ -213,3 +213,55 @@ describe('page bridge', () => {
     expect(ta.value).toBe('replaced');
   });
 });
+
+describe('readSelection', () => {
+  function selectContents(el: HTMLElement): void {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const sel = window.getSelection()!;
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  it('returns highlighted page text, trimmed', () => {
+    const p = append(document.createElement('p'));
+    p.textContent = '  Request Management System  ';
+    selectContents(p);
+    expect(bridge().readSelection()).toEqual({ text: 'Request Management System', site: location.hostname });
+  });
+
+  it('returns the selected part of a focused textarea', () => {
+    const ta = textarea('hello brave world');
+    ta.focus();
+    ta.setSelectionRange(6, 11);
+    expect(bridge().readSelection()?.text).toBe('brave');
+  });
+
+  it('returns null when nothing is selected', () => {
+    window.getSelection()?.removeAllRanges();
+    expect(bridge().readSelection()).toBeNull();
+  });
+
+  it('never reads a password field', () => {
+    const pw = input({ type: 'password' });
+    pw.value = 'secret';
+    pw.focus();
+    pw.select();
+    expect(bridge().readSelection()).toBeNull();
+  });
+
+  it('returns null when Verba is disabled on this site', () => {
+    const p = append(document.createElement('p'));
+    p.textContent = 'some text';
+    selectContents(p);
+    vi.mocked(isActiveHere).mockReturnValue(false);
+    expect(bridge().readSelection()).toBeNull();
+  });
+
+  it('caps very long selections at MAX_FIELD_TEXT', () => {
+    const p = append(document.createElement('p'));
+    p.textContent = 'a'.repeat(MAX_FIELD_TEXT + 50);
+    selectContents(p);
+    expect(bridge().readSelection()?.text.length).toBe(MAX_FIELD_TEXT);
+  });
+});

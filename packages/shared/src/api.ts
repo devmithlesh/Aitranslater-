@@ -11,6 +11,7 @@
 import type {
   ActivityType,
   AssistantToolId,
+  ExplainLanguage,
   ReplyLength,
   ReplyStyle,
   RewriteStyle,
@@ -403,6 +404,18 @@ export interface SummarizeRequest {
   format?: SummaryFormat;
 }
 export interface SummarizeResponse extends ProviderMeta {
+  result: string;
+}
+
+// ── Explain ─────────────────────────────────────────────────────────
+/** POST /api/explain — explains selected text in plain, simple words. */
+export interface ExplainRequest {
+  text: string;
+  /** "hinglish" or any supported language code. Defaults to DEFAULT_EXPLAIN_LANGUAGE. */
+  language?: ExplainLanguage;
+}
+export interface ExplainResponse extends ProviderMeta {
+  /** Plain text: short lines, "- " bullets, optional "**Heading**" lines. */
   result: string;
 }
 

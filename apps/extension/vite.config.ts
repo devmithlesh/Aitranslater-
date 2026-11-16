@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
 /**
- * Build 1/3 — extension pages (popup + options). Copies public/ (manifest.json, icons)
+ * Build 1/3 — extension pages (popup + options + side panel). Copies public/ (manifest.json, icons)
  * into dist/. Does NOT empty dist/: the `build` script removes it once up front, and
  * `dev` runs this build in watch mode next to the content and background builds, which
  * would otherwise wipe their output on every rebuild.
@@ -27,6 +27,7 @@ export default defineConfig({
       input: {
         popup: fileURLToPath(new URL('./src/pages/popup.html', import.meta.url)),
         options: fileURLToPath(new URL('./src/pages/options.html', import.meta.url)),
+        sidepanel: fileURLToPath(new URL('./src/pages/sidepanel.html', import.meta.url)),
       },
     },
   },

@@ -24,9 +24,18 @@ export interface FocusedFieldInfo {
 
 export type InsertResult = { ok: true } | { ok: false; reason: string };
 
+export interface SelectionInfo {
+  /** The text the user highlighted in this frame, trimmed, at most MAX_FIELD_TEXT chars. */
+  text: string;
+  /** location.hostname of the frame. */
+  site: string;
+}
+
 export interface PageBridge {
   /** The last focused editable field in this frame, or null (none, sensitive field, detached, or Verba disabled here). */
   readFocused(): FocusedFieldInfo | null;
+  /** The highlighted text in this frame (page text or inside a text box), or null (nothing, sensitive field, or Verba disabled here). */
+  readSelection(): SelectionInfo | null;
   /** Replaces the WHOLE text of that field with `text`. Verifies the result; never claims unverified success. */
   insert(text: string): Promise<InsertResult>;
 }

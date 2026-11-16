@@ -6,7 +6,7 @@
  * Every function passed as `func` is serialized by Chrome: it must not use imports or outer
  * variables. Everything it needs goes through `args`.
  */
-import { PAGE_BRIDGE_KEY, type FocusedFieldInfo, type InsertResult } from '../../shared/page-bridge';
+import { PAGE_BRIDGE_KEY, type FocusedFieldInfo, type InsertResult, type SelectionInfo } from '../../shared/page-bridge';
 
 export interface FocusedField {
   info: FocusedFieldInfo;
@@ -59,18 +59,45 @@ const MISSING_BRIDGE = 'verba:missing-bridge';
 
 type FrameResult = { frameId: number; result?: unknown };
 
-/** Asks every frame's bridge for its focused field. `func` is serialized: everything comes through args. */
-async function readAllFrames(tabId: number): Promise<FrameResult[]> {
+type BridgeReader = 'readFocused' | 'readSelection';
+
+/** Calls one bridge reader in every frame. `func` is serialized: everything comes through args. */
+async function readAllFrames(tabId: number, method: BridgeReader): Promise<FrameResult[]> {
   const results = await chrome.scripting.executeScript({
     target: { tabId, allFrames: true },
-    func: (key: string, missing: string) => {
-      const bridge = (globalThis as Record<string, unknown>)[key] as { readFocused?: () => unknown } | undefined;
-      if (!bridge || typeof bridge.readFocused !== 'function') return missing;
-      return bridge.readFocused() ?? null;
+    func: (key: string, name: string, missing: string) => {
+      const bridge = (globalThis as Record<string, unknown>)[key] as Record<string, unknown> | undefined;
+      const read = bridge?.[name];
+      if (typeof read !== 'function') return missing;
+      return (read as () => unknown).call(bridge) ?? null;
     },
-    args: [PAGE_BRIDGE_KEY, MISSING_BRIDGE],
+    args: [PAGE_BRIDGE_KEY, method, MISSING_BRIDGE],
   });
   return results as FrameResult[];
+}
+
+/**
+ * Reads every frame of the active tab. Tabs opened before Verba was installed (or reloaded) have no
+ * content script; then it is injected on the spot (activeTab grants access) and the read is retried.
+ * Null when the page cannot be scripted (chrome:// pages, the Web Store, Chrome's PDF viewer).
+ */
+async function readActiveTab(method: BridgeReader): Promise<{ tabId: number; results: FrameResult[] } | null> {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || typeof tab.id !== 'number' || isRestrictedUrl(tab.url)) return null;
+    const tabId = tab.id;
+
+    let results = await readAllFrames(tabId, method);
+    if (results.length > 0 && results.every((entry) => entry.result === MISSING_BRIDGE)) {
+      // content.js guards against running twice, so injecting into frames that already have it is harmless.
+      await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['content.js'] });
+      results = await readAllFrames(tabId, method);
+    }
+    return { tabId, results };
+  } catch {
+    // No "scripting" permission or no access to this page.
+    return null;
+  }
 }
 
 function pickNewest(results: readonly FrameResult[], tabId: number): FocusedField | null {
@@ -85,29 +112,34 @@ function pickNewest(results: readonly FrameResult[], tabId: number): FocusedFiel
   return best;
 }
 
-/**
- * Finds the most recently focused editable field across all frames of the active tab.
- * Tabs opened before Verba was installed (or reloaded) have no content script; then the script is
- * injected on the spot (activeTab grants access) and the read is retried, so no page reload is needed.
- * Returns null when there is no such field or the page cannot be scripted.
- */
+/** Finds the most recently focused editable field across all frames of the active tab, or null. */
 export async function readFocusedField(): Promise<FocusedField | null> {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab || typeof tab.id !== 'number' || isRestrictedUrl(tab.url)) return null;
-    const tabId = tab.id;
+  const read = await readActiveTab('readFocused');
+  return read ? pickNewest(read.results, read.tabId) : null;
+}
 
-    let results = await readAllFrames(tabId);
-    if (results.length > 0 && results.every((entry) => entry.result === MISSING_BRIDGE)) {
-      // content.js guards against running twice, so injecting into frames that already have it is harmless.
-      await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['content.js'] });
-      results = await readAllFrames(tabId);
+export interface PageSelection {
+  info: SelectionInfo;
+  tabId: number;
+}
+
+function isSelectionInfo(value: unknown): value is SelectionInfo {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.text === 'string' && v.text.trim() !== '' && typeof v.site === 'string';
+}
+
+/** The text highlighted in the active tab (the longest across frames), or null. */
+export async function readPageSelection(): Promise<PageSelection | null> {
+  const read = await readActiveTab('readSelection');
+  if (!read) return null;
+  let best: SelectionInfo | null = null;
+  for (const entry of read.results) {
+    if (isSelectionInfo(entry.result) && (best === null || entry.result.text.length > best.text.length)) {
+      best = entry.result;
     }
-    return pickNewest(results, tabId);
-  } catch {
-    // No "scripting" permission or no access to this page.
-    return null;
   }
+  return best ? { info: best, tabId: read.tabId } : null;
 }
 
 /** Replaces the whole text of the field in one frame. Never claims success it did not get from the bridge. */

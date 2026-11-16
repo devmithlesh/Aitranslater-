@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   ASSISTANT_TOOL_INSTRUCTIONS,
   buildAssistantPrompt,
+  buildExplainPrompt,
   buildGrammarPrompt,
   buildRewritePrompt,
   buildSmartReplyPrompt,
@@ -12,7 +13,7 @@ import {
   variantsTokenBudget,
 } from './prompts';
 import type { Prompt } from './prompts';
-import { AUTO_LANGUAGE, DEFAULT_VARIANT_STYLES, languageName } from '@verba/shared';
+import { AUTO_LANGUAGE, DEFAULT_EXPLAIN_LANGUAGE, DEFAULT_VARIANT_STYLES, languageName } from '@verba/shared';
 import type { RewriteStyle } from '@verba/shared';
 import type {
   AssistantRunRequest,
@@ -20,6 +21,8 @@ import type {
   ClientKind,
   CustomAssistant,
   CustomAssistantInput,
+  ExplainRequest,
+  ExplainResponse,
   GrammarIssue,
   GrammarRequest,
   GrammarResponse,
@@ -191,6 +194,26 @@ export class AiService {
       input: request.text,
       output: result.value,
       meta: { provider: result.provider, model: result.model, format },
+      languages: [],
+      chars: request.text.length,
+      saveHistory: settings.saveHistory,
+    });
+    return { result: result.value, ...this.meta(result, historyId) };
+  }
+
+  async explain(args: { userId: string; client: ClientKind; request: ExplainRequest; signal: AbortSignal }): Promise<ExplainResponse> {
+    const { userId, client, request, signal } = args;
+    const settings = await this.settings.get(userId);
+    const language = request.language ?? DEFAULT_EXPLAIN_LANGUAGE;
+    const prompt = buildExplainPrompt({ text: request.text, language });
+    const result = await this.generateText(userId, prompt, request.text, 0.4, signal);
+    const historyId = await this.history.record({
+      userId,
+      client,
+      type: 'assistant',
+      input: request.text,
+      output: result.value,
+      meta: { provider: result.provider, model: result.model, toolId: 'explain' },
       languages: [],
       chars: request.text.length,
       saveHistory: settings.saveHistory,

@@ -1,10 +1,13 @@
 /**
  * Verba background service worker (MV3). Stateless between wakes: every value
  * is read from chrome.storage. All listeners are registered synchronously at
- * the top level so events that wake the worker are never missed.
+ * the top level so events that wake the worker are never missed. The
+ * "Explain with Verba" context menu is created on install; it persists across
+ * browser restarts, so onStartup does not need to recreate it.
  */
 import { handleRequest } from './router';
 import { runScheduledSync } from './sync';
+import { handleExplainClick, registerExplainMenu } from './explain-menu';
 
 const SYNC_ALARM = 'verba-sync';
 const SYNC_PERIOD_MINUTES = 15;
@@ -18,8 +21,11 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   return true;
 });
 
+chrome.contextMenus.onClicked.addListener(handleExplainClick);
+
 chrome.runtime.onInstalled.addListener(() => {
   ensureAlarm();
+  registerExplainMenu();
   void runScheduledSync();
 });
 

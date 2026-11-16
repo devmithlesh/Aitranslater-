@@ -8,6 +8,7 @@ import { IconButton } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Skeleton } from '../components/ui/Spinner';
 import { useExtensionState } from '../hooks/useExtensionState';
+import { ExplainSelectionCard } from './ExplainSelectionCard';
 import { Onboarding } from './Onboarding';
 import { TranslatorView } from './translator/TranslatorView';
 import type { ExtensionError } from '../shared/messages';
@@ -62,14 +63,16 @@ export function Popup() {
         {state && !connected && <Onboarding onConnect={() => void handleOpenSettings()} />}
 
         {state && connected && (
-          <div className="min-w-0 p-3">
+          <div className="min-w-0 space-y-3 p-3">
+            <ExplainSelectionCard />
             <TranslatorView settings={state.settings} />
           </div>
         )}
       </div>
 
       <footer className="min-w-0 border-t border-border bg-surface px-3 py-2 text-[11px] leading-4 text-subtle">
-        <span className="font-medium text-muted">Alt+Shift+V</span> in any text box to open Verba.
+        <span className="font-medium text-muted">Alt+Shift+V</span> in any text box to open Verba. Select text and{' '}
+        <span className="font-medium text-muted">right-click → Explain with Verba</span> (works on PDFs too).
       </footer>
     </div>
   );

@@ -7,6 +7,8 @@ import {
   PASSWORD_MIN_LENGTH,
   ASSISTANT_TOOLS,
   AUTO_LANGUAGE,
+  HINGLISH,
+  isExplainLanguage,
   LLM_PROVIDER_IDS,
   MAX_INPUT_CHARS,
   MAX_VARIANT_STYLES,
@@ -83,6 +85,17 @@ export const rewriteSchema = z.object({
 export const summarizeSchema = z.object({
   text: textInput(),
   format: z.enum(SUMMARY_FORMATS).optional(),
+});
+
+/** "hinglish" or any supported language code; codes are canonicalized, "hinglish" is kept as-is. */
+export const explainSchema = z.object({
+  text: textInput(),
+  language: z
+    .string()
+    .trim()
+    .refine((value) => isExplainLanguage(value), { message: 'Unsupported explain language.' })
+    .transform((value) => (value === HINGLISH ? value : canonicalCode(value)))
+    .optional(),
 });
 
 export const smartReplySchema = z.object({

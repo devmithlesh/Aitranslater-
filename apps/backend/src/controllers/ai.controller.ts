@@ -2,6 +2,7 @@ import type { AssistantRunRequest } from '@verba/shared';
 import {
   assistantRunSchema,
   detectLanguageSchema,
+  explainSchema,
   grammarSchema,
   rewriteSchema,
   smartReplySchema,
@@ -51,6 +52,13 @@ export function createAiController(services: Services) {
       const request = parseOrThrow(summarizeSchema, req.body);
       res.json(
         await services.ai.summarize({ userId: LOCAL_USER_ID, client: getClientKind(req), request, signal: requestSignal(res) }),
+      );
+    }),
+
+    explain: asyncHandler(async (req, res) => {
+      const request = parseOrThrow(explainSchema, req.body);
+      res.json(
+        await services.ai.explain({ userId: LOCAL_USER_ID, client: getClientKind(req), request, signal: requestSignal(res) }),
       );
     }),
 

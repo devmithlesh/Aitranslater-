@@ -3,6 +3,7 @@
  * the dashboard and the extension (labels, menus). `icon` values are
  * lucide-react component names so every UI renders the same glyph.
  */
+import { getLanguage, isSupportedLanguage } from './languages';
 
 export interface CatalogEntry<Id extends string> {
   id: Id;
@@ -102,6 +103,31 @@ export const SUMMARY_FORMAT_LABELS: Record<SummaryFormat, string> = {
   medium: 'Paragraph',
   bullets: 'Key points',
 };
+
+// ── Explain (selected text explained simply) ───────────────────────
+/** "Hindi written in Latin letters, mixed with English": a special explain language with no ISO code. */
+export const HINGLISH = 'hinglish';
+
+/**
+ * Output language for POST /api/explain: HINGLISH or any code from LANGUAGES ("en", "ta", "fr", "zh-Hans"...).
+ * Validate with isExplainLanguage.
+ */
+export type ExplainLanguage = string;
+
+export const DEFAULT_EXPLAIN_LANGUAGE: ExplainLanguage = HINGLISH;
+
+/** Quick picks shown first in UIs; every other supported language is also allowed. */
+export const EXPLAIN_QUICK_LANGUAGES: readonly ExplainLanguage[] = [HINGLISH, 'en', 'hi'];
+
+export function isExplainLanguage(value: unknown): value is ExplainLanguage {
+  return typeof value === 'string' && (value === HINGLISH || isSupportedLanguage(value));
+}
+
+/** Display name: "Hinglish", or the language's own name ("हिन्दी", "Français"). */
+export function explainLanguageLabel(code: ExplainLanguage): string {
+  if (code === HINGLISH) return 'Hinglish';
+  return getLanguage(code)?.nativeName ?? code;
+}
 
 // ── Built-in AI assistant tools ─────────────────────────────────────
 export const ASSISTANT_TOOLS = [
