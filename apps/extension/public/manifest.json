@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Verba — AI Writing & Translation",
   "short_name": "Verba",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Translate and rewrite text in any box, and right-click selected text to get a simple AI explanation in the side panel.",
   "minimum_chrome_version": "116",
   "icons": {
