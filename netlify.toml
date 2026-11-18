@@ -12,12 +12,6 @@
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
 
-# Source maps are for debugging only; keep them out of search results.
-[[headers]]
-  for = "/assets/*.map"
-  [headers.values]
-    X-Robots-Tag = "noindex"
-
 [[headers]]
   for = "/*"
   [headers.values]

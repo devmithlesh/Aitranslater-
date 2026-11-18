@@ -31,8 +31,8 @@ export default defineConfig(({ mode }) => {
     },
     preview: { port: 4173 },
     build: {
-      // Maps are still generated for debugging but not linked from the bundles, so browsers don't fetch them.
-      sourcemap: 'hidden',
+      // No source maps in the deployed site: they would publish the full frontend source.
+      sourcemap: false,
       rollupOptions: {
         output: {
           manualChunks: {
