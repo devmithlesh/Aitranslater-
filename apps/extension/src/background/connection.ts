@@ -1,8 +1,10 @@
 import {
-  decodeConnectionCode,
   EMAIL_MAX_LENGTH,
+  NAME_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
   type LoginRequest,
+  type SignupRequest,
 } from '@verba/shared';
 import { DEFAULT_API_URL, DEFAULT_DASHBOARD_URL, type ExtensionState, type Result } from '../shared/messages';
 import { fail, ok } from '../lib/result';
@@ -16,9 +18,8 @@ const LOGIN_TIMEOUT_MS = 20_000;
 const LOGOUT_TIMEOUT_MS = 5_000;
 
 interface ConnectInput {
-  code?: string;
-  apiUrl?: string;
-  token?: string;
+  apiUrl: string;
+  token: string;
   dashboardUrl?: string;
 }
 
@@ -35,6 +36,14 @@ export interface LoginInput {
   dashboardUrl?: string;
 }
 
+export interface SignupInput {
+  apiUrl?: string;
+  name: string;
+  email: string;
+  password: string;
+  dashboardUrl?: string;
+}
+
 /** Optional dashboard address: blank means the default. */
 function resolveDashboardUrl(raw: string | undefined): Result<string> {
   if (raw === undefined || raw.trim() === '') return ok(DEFAULT_DASHBOARD_URL);
@@ -44,27 +53,15 @@ function resolveDashboardUrl(raw: string | undefined): Result<string> {
 }
 
 function resolveConnectInput(req: ConnectInput): Result<ResolvedConnect> {
-  let apiUrl: string | null;
-  let token: string;
-
-  if (req.code !== undefined && req.code.trim() !== '') {
-    const decoded = decodeConnectionCode(req.code);
-    if (!decoded) {
-      return fail('VALIDATION_ERROR', "That connection code isn't valid. Copy a fresh one from the Verba dashboard.");
-    }
-    apiUrl = decoded.apiUrl;
-    token = decoded.token;
-  } else {
-    apiUrl = cleanApiUrl(req.apiUrl ?? '');
-    token = (req.token ?? '').trim();
-    if (!apiUrl) return fail('VALIDATION_ERROR', 'Enter your Verba server address (http or https).');
-    if (!token) return fail('VALIDATION_ERROR', 'Paste your access token.');
-  }
+  const apiUrl = cleanApiUrl(req.apiUrl);
+  const token = req.token.trim();
+  if (!apiUrl) return fail('VALIDATION_ERROR', 'Enter your Verba server address (http or https).');
+  if (!token) return fail('VALIDATION_ERROR', 'Paste your access token.');
 
   const dashboard = resolveDashboardUrl(req.dashboardUrl);
   if (!dashboard.ok) return { ok: false, error: dashboard.error };
 
-  return ok({ apiUrl: apiUrl ?? '', token, dashboardUrl: dashboard.data });
+  return ok({ apiUrl, token, dashboardUrl: dashboard.data });
 }
 
 /**
@@ -115,7 +112,7 @@ export async function saveConnection(apiUrl: string, token: string, dashboardUrl
 }
 
 /** Verifies the server and token, then persists the connection and syncs. */
-export async function connectExtension(req: ConnectInput): Promise<Result<ExtensionState>> {
+async function connectExtension(req: ConnectInput): Promise<Result<ExtensionState>> {
   const input = resolveConnectInput(req);
   if (!input.ok) return { ok: false, error: input.error };
   const { apiUrl, token, dashboardUrl } = input.data;
@@ -156,6 +153,24 @@ function readSession(data: unknown): { token: string; mustChangePassword: boolea
 }
 
 /**
+ * Shared tail for every email + password sign-in: reads the returned session, refuses
+ * sessions that must change password, then saves the connection (ending the session if saving fails).
+ */
+async function finishSession(apiUrl: string, data: unknown, dashboardUrl: string): Promise<Result<ExtensionState>> {
+  const session = readSession(data);
+  if (!session) return fail('INTERNAL', 'Verba returned an unexpected sign-in response.');
+  if (session.mustChangePassword) {
+    // The session was minted but not kept: end it and ask the user to finish on the website.
+    await endServerSession(apiUrl, session.token);
+    return fail('PASSWORD_RESET_REQUIRED', 'Your admin reset your password. Set a new one on the website first.');
+  }
+
+  const saved = await saveConnection(apiUrl, session.token, dashboardUrl);
+  if (!saved.ok) await endServerSession(apiUrl, session.token);
+  return saved;
+}
+
+/**
  * Email + password sign-in. The password is sent once to POST /auth/login and is
  * never stored or logged. Only the returned session token is saved.
  */
@@ -179,17 +194,41 @@ export async function loginExtension(req: LoginInput): Promise<Result<ExtensionS
   const login = await fetchBackend({ apiUrl }, 'POST', '/auth/login', body, { timeoutMs: LOGIN_TIMEOUT_MS });
   if (!login.ok) return login;
 
-  const session = readSession(login.data);
-  if (!session) return fail('INTERNAL', 'Verba returned an unexpected sign-in response.');
-  if (session.mustChangePassword) {
-    // The session was minted but not kept: end it and ask the user to finish on the website.
-    await endServerSession(apiUrl, session.token);
-    return fail('PASSWORD_RESET_REQUIRED', 'Your admin reset your password. Set a new one on the website first.');
+  return finishSession(apiUrl, login.data, dashboard.data);
+}
+
+/**
+ * Account sign-up, then sign-in with the returned session. The password is sent once to
+ * POST /auth/signup and is never stored or logged. Only the returned session token is saved.
+ */
+export async function signupExtension(req: SignupInput): Promise<Result<ExtensionState>> {
+  const name = req.name.trim();
+  if (name === '' || name.length > NAME_MAX_LENGTH) return fail('VALIDATION_ERROR', 'Enter your name.');
+
+  const email = req.email.trim();
+  if (email === '' || email.length > EMAIL_MAX_LENGTH) return fail('VALIDATION_ERROR', 'Enter your email address.');
+
+  if (req.password.length < PASSWORD_MIN_LENGTH) {
+    return fail('VALIDATION_ERROR', `Use a password of at least ${PASSWORD_MIN_LENGTH} characters.`);
+  }
+  if (req.password.length > PASSWORD_MAX_LENGTH) {
+    return fail('VALIDATION_ERROR', `Use a password of at most ${PASSWORD_MAX_LENGTH} characters.`);
   }
 
-  const saved = await saveConnection(apiUrl, session.token, dashboard.data);
-  if (!saved.ok) await endServerSession(apiUrl, session.token);
-  return saved;
+  const apiUrl = cleanApiUrl(req.apiUrl?.trim() ? req.apiUrl : DEFAULT_API_URL);
+  if (!apiUrl) return fail('VALIDATION_ERROR', 'Enter your Verba server address (http or https).');
+
+  const dashboard = resolveDashboardUrl(req.dashboardUrl);
+  if (!dashboard.ok) return { ok: false, error: dashboard.error };
+
+  const server = await checkServer(apiUrl);
+  if (!server.ok) return server;
+
+  const body: SignupRequest = { name, email, password: req.password };
+  const signup = await fetchBackend({ apiUrl }, 'POST', '/auth/signup', body, { timeoutMs: LOGIN_TIMEOUT_MS });
+  if (!signup.ok) return signup;
+
+  return finishSession(apiUrl, signup.data, dashboard.data);
 }
 
 /** Best effort: ends the server session. Never throws, so local sign-out always completes. */
@@ -214,13 +253,6 @@ export async function disconnectExtension(): Promise<Result<ExtensionState>> {
     settings: null,
     assistants: [],
   });
-  return ok(state);
-}
-
-export async function setDashboardUrl(raw: string): Promise<Result<ExtensionState>> {
-  const cleaned = cleanDashboardUrl(raw);
-  if (!cleaned) return fail('VALIDATION_ERROR', 'Enter a valid dashboard address (http or https).');
-  const state = await patchState({ dashboardUrl: cleaned });
   return ok(state);
 }
 

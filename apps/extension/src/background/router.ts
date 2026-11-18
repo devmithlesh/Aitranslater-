@@ -3,15 +3,19 @@ import { fail, ok } from '../lib/result';
 import { classifySender, isHttpMethod, isRequestAllowed } from '../lib/policy';
 import { isRecord } from '../lib/guards';
 import { readState } from '../lib/storage';
-import { EMAIL_MAX_LENGTH, PASSWORD_MAX_LENGTH } from '@verba/shared';
+import {
+  EMAIL_MAX_LENGTH,
+  NAME_MAX_LENGTH,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+} from '@verba/shared';
 import { callBackend } from './backend';
 import {
-  connectExtension,
   disconnectExtension,
   loginExtension,
   openDashboard,
   openOptions,
-  setDashboardUrl,
+  signupExtension,
 } from './connection';
 import { syncNow } from './sync';
 
@@ -34,6 +38,24 @@ function parseLogin(value: Record<string, unknown>): BackgroundRequest | null {
   };
 }
 
+/** Name (trimmed, 1..NAME_MAX_LENGTH), email (trimmed, 1..EMAIL_MAX_LENGTH) and password (PASSWORD_MIN_LENGTH..PASSWORD_MAX_LENGTH, not trimmed). */
+function parseSignup(value: Record<string, unknown>): BackgroundRequest | null {
+  if (typeof value.name !== 'string' || typeof value.email !== 'string' || typeof value.password !== 'string') return null;
+  const name = value.name.trim();
+  if (name.length === 0 || name.length > NAME_MAX_LENGTH) return null;
+  const email = value.email.trim();
+  if (email.length === 0 || email.length > EMAIL_MAX_LENGTH) return null;
+  if (value.password.length < PASSWORD_MIN_LENGTH || value.password.length > PASSWORD_MAX_LENGTH) return null;
+  return {
+    type: 'verba:signup',
+    apiUrl: optString(value.apiUrl),
+    name,
+    email,
+    password: value.password,
+    dashboardUrl: optString(value.dashboardUrl),
+  };
+}
+
 /** Validates an untrusted runtime message into a typed request, or null. */
 export function parseRequest(value: unknown): BackgroundRequest | null {
   if (!isRecord(value) || typeof value.type !== 'string') return null;
@@ -44,22 +66,14 @@ export function parseRequest(value: unknown): BackgroundRequest | null {
         : null;
     case 'verba:get-state':
       return { type: 'verba:get-state' };
-    case 'verba:connect':
-      return {
-        type: 'verba:connect',
-        code: optString(value.code),
-        apiUrl: optString(value.apiUrl),
-        token: optString(value.token),
-        dashboardUrl: optString(value.dashboardUrl),
-      };
     case 'verba:login':
       return parseLogin(value);
+    case 'verba:signup':
+      return parseSignup(value);
     case 'verba:disconnect':
       return { type: 'verba:disconnect' };
     case 'verba:sync':
       return { type: 'verba:sync' };
-    case 'verba:set-dashboard-url':
-      return typeof value.dashboardUrl === 'string' ? { type: 'verba:set-dashboard-url', dashboardUrl: value.dashboardUrl } : null;
     case 'verba:open-dashboard':
       return { type: 'verba:open-dashboard', path: optString(value.path) };
     case 'verba:open-options':
@@ -75,16 +89,14 @@ async function dispatch(request: BackgroundRequest): Promise<unknown> {
       return callBackend(request.method, request.path, request.body);
     case 'verba:get-state':
       return ok(await readState());
-    case 'verba:connect':
-      return connectExtension(request);
     case 'verba:login':
       return loginExtension(request);
+    case 'verba:signup':
+      return signupExtension(request);
     case 'verba:disconnect':
       return disconnectExtension();
     case 'verba:sync':
       return syncNow();
-    case 'verba:set-dashboard-url':
-      return setDashboardUrl(request.dashboardUrl);
     case 'verba:open-dashboard':
       return openDashboard(request.path);
     case 'verba:open-options':
@@ -103,6 +115,9 @@ export async function handleRequest(message: unknown, sender: chrome.runtime.Mes
       // Login gets its own message: the form validates first, so this only happens for malformed input.
       if (isRecord(message) && message.type === 'verba:login') {
         return fail('VALIDATION_ERROR', 'Enter a valid email and password.');
+      }
+      if (isRecord(message) && message.type === 'verba:signup') {
+        return fail('VALIDATION_ERROR', 'Enter your name, a valid email and a password of at least 8 characters.');
       }
       return fail('VALIDATION_ERROR', 'Unknown Verba request.');
     }

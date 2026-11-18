@@ -1,4 +1,4 @@
-import { Info, Keyboard, Languages, MousePointerClick, Plug, ShieldCheck } from 'lucide-react';
+import { Info, Keyboard, Languages, MousePointerClick, ShieldCheck, UserRound } from 'lucide-react';
 import { LogoMark } from '../components/Logo';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Skeleton } from '../components/ui/Spinner';
@@ -12,7 +12,7 @@ import { ShortcutsSection } from './sections/ShortcutsSection';
 import { ToolbarSection } from './sections/ToolbarSection';
 
 const NAV = [
-  { id: 'connection', label: 'Connection', icon: Plug },
+  { id: 'connection', label: 'Account', icon: UserRound },
   { id: 'toolbar', label: 'Toolbar & behaviour', icon: MousePointerClick },
   { id: 'languages', label: 'Languages', icon: Languages },
   { id: 'shortcuts', label: 'Shortcuts', icon: Keyboard },
@@ -29,7 +29,7 @@ export function Settings() {
         <LogoMark size={30} />
         <div>
           <h1 className="text-[18px] font-semibold tracking-tight">Verba settings</h1>
-          <p className="text-[12.5px] text-muted">Manage your connection, toolbar, languages and privacy.</p>
+          <p className="text-[12.5px] text-muted">Manage your account, toolbar, languages and privacy.</p>
         </div>
       </div>
 

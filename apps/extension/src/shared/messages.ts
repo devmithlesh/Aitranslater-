@@ -65,16 +65,14 @@ export type BackgroundRequest =
   /** Proxy a call to `${apiUrl}/api${path}`. Only extension pages (popup, options) may send it. */
   | { type: 'verba:api'; method: HttpMethod; path: string; body?: unknown }
   | { type: 'verba:get-state' }
-  /** Accepts a connection code ("verba_…") or an explicit url+token. Verifies before saving. */
-  | { type: 'verba:connect'; code?: string; apiUrl?: string; token?: string; dashboardUrl?: string }
   /** Email + password sign-in. Never stores the password; saves only the session token it returns. */
   | { type: 'verba:login'; apiUrl?: string; email: string; password: string; dashboardUrl?: string }
+  /** Creates an account with name, email and password, then signs in. Never stores the password. */
+  | { type: 'verba:signup'; apiUrl?: string; name: string; email: string; password: string; dashboardUrl?: string }
   /** Ends the server session (best effort) and clears the local connection. */
   | { type: 'verba:disconnect' }
   /** Re-fetch settings + assistants from the backend now. */
   | { type: 'verba:sync' }
-  /** Update the dashboard URL without reconnecting. */
-  | { type: 'verba:set-dashboard-url'; dashboardUrl: string }
   | { type: 'verba:open-dashboard'; path?: string }
   /** Content scripts cannot call chrome.runtime.openOptionsPage themselves. */
   | { type: 'verba:open-options' };
@@ -83,11 +81,10 @@ export type BackgroundRequest =
 export interface BackgroundResponseMap {
   'verba:api': Result<unknown>;
   'verba:get-state': Result<ExtensionState>;
-  'verba:connect': Result<ExtensionState>;
   'verba:login': Result<ExtensionState>;
+  'verba:signup': Result<ExtensionState>;
   'verba:disconnect': Result<ExtensionState>;
   'verba:sync': Result<ExtensionState>;
-  'verba:set-dashboard-url': Result<ExtensionState>;
   'verba:open-dashboard': Result<null>;
   'verba:open-options': Result<null>;
 }

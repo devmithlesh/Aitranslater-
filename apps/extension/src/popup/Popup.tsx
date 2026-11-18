@@ -1,4 +1,4 @@
-import { ExternalLink, Settings } from 'lucide-react';
+import { ExternalLink, LogOut, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { connectionStatus, StatusDot } from '../components/ConnectionStatus';
 import { localError } from '../components/errors';
@@ -8,14 +8,16 @@ import { IconButton } from '../components/ui/Button';
 import { ErrorMessage } from '../components/ui/ErrorMessage';
 import { Skeleton } from '../components/ui/Spinner';
 import { useExtensionState } from '../hooks/useExtensionState';
+import { sendToBackground, type ExtensionError } from '../shared/messages';
+import { AuthPanel, type AuthMode } from './AuthPanel';
 import { ExplainSelectionCard } from './ExplainSelectionCard';
-import { Onboarding } from './Onboarding';
 import { TranslatorView } from './translator/TranslatorView';
-import type { ExtensionError } from '../shared/messages';
 
 export function Popup() {
   const { state, loading, error, refresh } = useExtensionState();
   const [notice, setNotice] = useState<ExtensionError | null>(null);
+  const [authMode, setAuthMode] = useState<AuthMode>('signin');
+  const [signingOut, setSigningOut] = useState(false);
   const status = connectionStatus(state);
 
   async function handleOpenDashboard() {
@@ -28,7 +30,16 @@ export function Popup() {
     setNotice(ok ? null : localError('Could not open Verba settings.'));
   }
 
+  async function handleSignOut() {
+    setSigningOut(true);
+    const res = await sendToBackground({ type: 'verba:disconnect' });
+    setSigningOut(false);
+    setNotice(res.ok ? null : res.error);
+    refresh();
+  }
+
   const connected = state?.connected === true;
+  const signedOutReady = state !== null && !connected;
 
   return (
     <div className="flex max-h-[580px] min-h-[240px] min-w-0 flex-col overflow-x-hidden bg-bg text-fg">
@@ -37,7 +48,29 @@ export function Popup() {
         <span className="text-[14px] font-semibold tracking-tight">Verba</span>
         <StatusDot tone={status.tone} label={status.label} className="ml-0.5" />
         <div className="ml-auto flex items-center gap-0.5">
-          <IconButton icon={ExternalLink} label="Open dashboard" size="sm" onClick={() => void handleOpenDashboard()} />
+          {signedOutReady && (
+            // One switch: offers the form that is not showing.
+            <button
+              type="button"
+              onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+              className="mr-1 inline-flex h-6 items-center rounded-md bg-brand-gradient px-2.5 text-[11.5px] font-semibold text-brand-fg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            >
+              {authMode === 'signin' ? 'Sign up' : 'Sign in'}
+            </button>
+          )}
+          {connected && (
+            <>
+              <IconButton icon={ExternalLink} label="Open dashboard" size="sm" onClick={() => void handleOpenDashboard()} />
+              <IconButton
+                icon={LogOut}
+                label="Sign out"
+                size="sm"
+                disabled={signingOut}
+                aria-busy={signingOut || undefined}
+                onClick={() => void handleSignOut()}
+              />
+            </>
+          )}
           <IconButton icon={Settings} label="Settings" size="sm" onClick={() => void handleOpenSettings()} />
         </div>
       </header>
@@ -60,7 +93,9 @@ export function Popup() {
           </div>
         )}
 
-        {state && !connected && <Onboarding onConnect={() => void handleOpenSettings()} />}
+        {state && !connected && (
+          <AuthPanel mode={authMode} onModeChange={setAuthMode} onSignedIn={refresh} />
+        )}
 
         {state && connected && (
           <div className="min-w-0 space-y-3 p-3">
