@@ -35,7 +35,7 @@ export default function ConnectExtensionPage() {
     <div className="mx-auto w-full max-w-2xl animate-slide-up">
       <PageHeader
         title="Connect Chrome extension"
-        description="Create a code and paste it into the extension. Each code is its own session, separate from your dashboard sign-in."
+        description="Easiest: in the extension click 'Sign in with Verba website'. Or create a code here and paste it into the extension's settings (needed for self-hosted servers)."
         icon={<Puzzle size={20} aria-hidden />}
       />
 

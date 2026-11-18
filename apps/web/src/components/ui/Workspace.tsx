@@ -4,6 +4,7 @@
 import { MAX_INPUT_CHARS } from '@verba/shared';
 import { Eraser, ShieldCheck } from 'lucide-react';
 import type { ReactNode, TextareaHTMLAttributes } from 'react';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { useSettingsQuery } from '@/store/api';
 import { cn } from '@/utils/cn';
 import { formatNumber } from '@/utils/format';
@@ -21,6 +22,7 @@ export function PageHeader({
   icon?: ReactNode;
   actions?: ReactNode;
 }) {
+  usePageTitle(title);
   return (
     <header className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
       <div className="flex items-center gap-3.5">

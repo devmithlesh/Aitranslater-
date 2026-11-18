@@ -22,6 +22,9 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
+  "externally_connectable": {
+    "matches": ["https://verba-trans-ai.netlify.app/*", "http://localhost/*", "http://127.0.0.1/*"]
+  },
   "options_ui": {
     "page": "options.html",
     "open_in_tab": true

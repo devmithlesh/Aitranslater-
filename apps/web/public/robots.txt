@@ -1,0 +1,12 @@
+# Public pages only; the signed-in app is private.
+User-agent: *
+Allow: /$
+Allow: /login
+Allow: /signup
+Allow: /privacy
+Allow: /assets/
+Allow: /favicon.svg
+Allow: /og-image.png
+Disallow: /
+
+Sitemap: https://verba-trans-ai.netlify.app/sitemap.xml

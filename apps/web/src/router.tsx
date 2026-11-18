@@ -18,6 +18,7 @@ const UsagePage = lazy(() => import('@/pages/UsagePage'));
 const ConnectPage = lazy(() => import('@/pages/ConnectPage'));
 const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
 const ConnectExtensionPage = lazy(() => import('@/pages/ConnectExtensionPage'));
+const ExtensionSignInPage = lazy(() => import('@/pages/ExtensionSignInPage'));
 
 /**
  * Sends signed-out visitors to /login, and holds app routes until the account is known.
@@ -34,7 +35,7 @@ function RequireConnection({ children }: { children: ReactNode }) {
       <Navigate
         to="/login"
         replace
-        state={{ from: location.pathname, reason: unauthorized ? 'unauthorized' : undefined }}
+        state={{ from: location.pathname + location.search, reason: unauthorized ? 'unauthorized' : undefined }}
       />
     );
   }
@@ -93,6 +94,7 @@ export const router = createBrowserRouter([
       { index: true, element: <VariantTranslatorPage /> },
       { path: 'account/password', element: <ChangePasswordPage /> },
       { path: 'account/extension', element: <ConnectExtensionPage /> },
+      { path: 'extension/connect', element: <ExtensionSignInPage /> },
       { path: 'settings/providers', element: <RequireAdmin><ProviderSettingsPage /></RequireAdmin> },
       { path: 'users', element: <RequireAdmin><UsersPage /></RequireAdmin> },
       { path: 'usage', element: <RequireAdmin><UsagePage /></RequireAdmin> },

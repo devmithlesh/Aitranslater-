@@ -3,6 +3,7 @@ import { ExternalLink, Eye, EyeOff, LogIn, Plug, RefreshCw, Unplug } from 'lucid
 import { useMemo, useState, type FormEvent } from 'react';
 import { connectionStatus, StatusDot } from '../../components/ConnectionStatus';
 import { relativeTime } from '../../components/format';
+import { openDashboard } from '../../components/navigation';
 import { Button, IconButton } from '../../components/ui/Button';
 import { SegmentedControl } from '../../components/ui/SegmentedControl';
 import { fieldClass } from '../../components/ui/fieldClass';
@@ -167,6 +168,16 @@ export function ConnectionSection({ state, refresh }: { state: ExtensionState | 
     }
   }
 
+  /**
+   * Opens the website, which signs the user in and connects this extension. The state listener
+   * re-renders this page once the connection is saved.
+   */
+  async function signInWithWebsite() {
+    setFeedback(null);
+    const res = await openDashboard(`/extension/connect?ext=${chrome.runtime.id}`);
+    if (!res.ok) setFeedback({ tone: 'error', text: res.error.message });
+  }
+
   async function syncNow() {
     setBusy('sync');
     setFeedback(null);
@@ -254,6 +265,22 @@ export function ConnectionSection({ state, refresh }: { state: ExtensionState | 
       </div>
 
       <div className="space-y-4">
+        {!connected && (
+          <div className="space-y-3">
+            <Button fullWidth icon={LogIn} onClick={() => void signInWithWebsite()}>
+              Sign in with Verba website
+            </Button>
+            <p className="text-center text-[12.5px] text-muted">
+              Works with email and Google accounts. This tab updates by itself once you&apos;re signed in.
+            </p>
+            <div className="flex items-center gap-3 text-[12px] text-subtle">
+              <span className="h-px flex-1 bg-border" />
+              or
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-[13px] font-semibold">{connected ? 'Connect to another server' : 'Sign in'}</h3>
           <SegmentedControl label="Sign-in method" size="sm" options={TAB_OPTIONS} value={tab} onChange={setTab} />
@@ -302,9 +329,11 @@ export function ConnectionSection({ state, refresh }: { state: ExtensionState | 
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px]">
                 <a
-                  href={`${DEFAULT_DASHBOARD_URL}/signup`}
-                  target="_blank"
-                  rel="noreferrer"
+                  href={`${DEFAULT_DASHBOARD_URL}/extension/connect?ext=${chrome.runtime.id}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    void signInWithWebsite();
+                  }}
                   className="font-medium text-brand hover:underline"
                 >
                   Create an account

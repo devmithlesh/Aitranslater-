@@ -3,8 +3,6 @@ import { useState, type FormEvent } from 'react';
 import { Button, Card, CardHeader, ErrorState, Field, Input, useToast } from '@/components/ui';
 import { checkEmail, checkName } from '@/features/auth/validation';
 import { useCreateUserMutation } from '@/store/api';
-import { LimitInput } from './LimitInput';
-import { parseLimitInput } from './limits';
 import type { RevealedPassword } from './TemporaryPasswordReveal';
 
 export interface AddUserFormProps {
@@ -18,10 +16,8 @@ export function AddUserForm({ onCreated, onCancel }: AddUserFormProps) {
   const [createUser, { isLoading, reset }] = useCreateUserMutation();
   const [userName, setUserName] = useState('');
   const [email, setEmail] = useState('');
-  const [limit, setLimit] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
-  const [limitError, setLimitError] = useState<string | null>(null);
   const [formError, setFormError] = useState<unknown>(null);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -30,16 +26,14 @@ export function AddUserForm({ onCreated, onCancel }: AddUserFormProps) {
 
     const nameProblem = checkName(userName);
     const emailProblem = checkEmail(email);
-    const parsed = parseLimitInput(limit);
     setNameError(nameProblem);
     setEmailError(emailProblem);
-    setLimitError(parsed.ok ? null : parsed.error);
     setFormError(null);
-    if (nameProblem || emailProblem || !parsed.ok) return;
+    if (nameProblem || emailProblem) return;
 
     const trimmedName = userName.trim();
     try {
-      const result = await createUser({ name: trimmedName, email: email.trim(), dailyLimit: parsed.value }).unwrap();
+      const result = await createUser({ name: trimmedName, email: email.trim() }).unwrap();
       // Drop the password from RTK Query's mutation state right away; only component state keeps it.
       reset();
       onCreated({ name: result.user.name, password: result.temporaryPassword });
@@ -87,14 +81,6 @@ export function AddUserForm({ onCreated, onCancel }: AddUserFormProps) {
               />
             )}
           </Field>
-          <LimitInput
-            label="Daily limit"
-            value={limit}
-            onChange={setLimit}
-            error={limitError}
-            hint="Translations per day. Leave empty to follow the default limit."
-            placeholder="Follow default"
-          />
         </div>
 
         {formError !== null && <ErrorState compact error={formError} />}

@@ -3,6 +3,7 @@ import { ErrorState, Skeleton } from '@/components/ui';
 import { AuthCard, AuthLayout } from '@/features/auth/AuthLayout';
 import { readFromState } from '@/features/auth/redirect';
 import { SignupForm } from '@/features/auth/SignupForm';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { useAuthConfigQuery } from '@/store/api';
 
 /** Account creation. Hidden when the admin has closed signups. */
@@ -10,6 +11,7 @@ export default function SignupPage() {
   const location = useLocation();
   const config = useAuthConfigQuery();
   const redirectTo = readFromState(location.state);
+  usePageTitle('Create your account', 'Create a free Verba account. Translate and rewrite what you type into clear English, in any tone, on the web and in Chrome.');
 
   let body;
   if (config.isError && !config.data) {
@@ -36,7 +38,7 @@ export default function SignupPage() {
 
       <p className="mt-6 text-center text-[13.5px] text-muted">
         Already have an account?{' '}
-        <Link to="/login" className="font-medium text-brand underline-offset-2 hover:underline">
+        <Link to="/login" state={location.state} className="font-medium text-brand underline-offset-2 hover:underline">
           Sign in
         </Link>
       </p>

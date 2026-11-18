@@ -6,6 +6,7 @@
  * browser restarts, so onStartup does not need to recreate it.
  */
 import { handleRequest } from './router';
+import { handleExternalRequest } from './external';
 import { runScheduledSync } from './sync';
 import { handleExplainClick, registerExplainMenu } from './explain-menu';
 
@@ -18,6 +19,12 @@ function ensureAlarm(): void {
 
 chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   void handleRequest(message, sender).then(sendResponse);
+  return true;
+});
+
+// Website messages (see externally_connectable). Kept apart from handleRequest so web pages never reach the internal API.
+chrome.runtime.onMessageExternal.addListener((message: unknown, sender, sendResponse) => {
+  void handleExternalRequest(message, sender).then(sendResponse);
   return true;
 });
 

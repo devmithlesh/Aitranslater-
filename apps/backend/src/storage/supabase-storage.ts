@@ -160,6 +160,15 @@ function toStoredSession(row: AppSessionRow): StoredSession {
   };
 }
 
+const SUPABASE_TIMEOUT_MS = 10_000;
+
+/** fetch with a deadline, keeping any abort signal the caller passed. */
+function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const timeout = AbortSignal.timeout(SUPABASE_TIMEOUT_MS);
+  const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+  return fetch(input, { ...init, signal });
+}
+
 export class SupabaseStorage implements Storage {
   readonly kind = 'supabase' as const;
   private readonly client: SupabaseClient;
@@ -167,6 +176,8 @@ export class SupabaseStorage implements Storage {
   constructor(url: string, serviceRoleKey: string) {
     this.client = createClient(url, serviceRoleKey, {
       auth: { persistSession: false, autoRefreshToken: false },
+      // A hung request must not hold the credit/usage locks forever: every call gets a deadline.
+      global: { fetch: fetchWithTimeout },
     });
   }
 

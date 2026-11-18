@@ -1,15 +1,29 @@
-import { Plug } from 'lucide-react';
+import { LogIn } from 'lucide-react';
+import { useState } from 'react';
+import { openDashboard } from '../components/navigation';
 import { Button } from '../components/ui/Button';
 import { LogoMark } from '../components/Logo';
-import { DEFAULT_DASHBOARD_URL } from '../shared/messages';
 
 const STEPS = [
-  { title: 'Sign in with email', body: 'Open Verba settings and sign in with your email and password.' },
-  { title: 'Or use a code', body: 'Signed in with Google? On the website, open Account → Connect extension, then paste the code in Settings.' },
+  { title: 'Click Sign in with Verba website', body: 'Sign in or create an account (email or Google). The extension connects automatically.' },
+  { title: 'Done', body: 'Come back here and start translating.' },
 ] as const;
 
 /** Shown when the extension is not connected to a Verba account yet. */
 export function Onboarding({ onConnect }: { onConnect: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+
+  /** Opens the website sign-in page; it links this extension back automatically. */
+  async function signInWithWebsite() {
+    setError(null);
+    const res = await openDashboard(`/extension/connect?ext=${chrome.runtime.id}`);
+    if (res.ok) {
+      window.close();
+    } else {
+      setError(res.error.message);
+    }
+  }
+
   return (
     <div className="space-y-4 p-4">
       <div className="relative overflow-hidden rounded-2xl border border-border bg-surface p-4 shadow-card">
@@ -39,20 +53,16 @@ export function Onboarding({ onConnect }: { onConnect: () => void }) {
         ))}
       </ol>
 
-      <Button fullWidth icon={Plug} onClick={onConnect}>
-        Open settings to sign in
+      <Button fullWidth icon={LogIn} onClick={() => void signInWithWebsite()}>
+        Sign in with Verba website
       </Button>
 
-      <p className="text-center text-[12.5px] text-muted">
-        No account?{' '}
-        <a
-          href={`${DEFAULT_DASHBOARD_URL}/signup`}
-          target="_blank"
-          rel="noreferrer"
-          className="font-medium text-brand hover:underline"
-        >
-          Create one
-        </a>
+      {error && <p className="text-center text-[12.5px] text-danger">{error}</p>}
+
+      <p className="text-center text-[12.5px]">
+        <Button variant="ghost" size="sm" onClick={onConnect} className="text-brand hover:text-brand">
+          Sign in with email instead
+        </Button>
       </p>
     </div>
   );

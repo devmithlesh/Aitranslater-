@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
+import { usePageTitle } from '@/hooks/usePageTitle';
 import { Logo } from '@/layouts/Logo';
 
 /** Shown on the page and used for privacy requests. Change it here if the contact address changes. */
@@ -17,6 +18,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 
 /** Public privacy policy (no sign-in), linked from the Chrome Web Store listing. */
 export default function PrivacyPage() {
+  usePageTitle('Privacy policy', 'How Verba and the Verba Chrome extension collect, use and protect your data.');
   return (
     <div className="min-h-screen bg-bg">
       <header className="flex h-16 items-center border-b border-border px-4 sm:px-6">

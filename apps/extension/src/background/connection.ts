@@ -125,6 +125,30 @@ export async function connectExtension(req: ConnectInput): Promise<Result<Extens
   return saveConnection(apiUrl, token, dashboardUrl);
 }
 
+/**
+ * Connects using a token the website just issued (external messages). Replaces any previous
+ * session, and revokes the new token if it can't be saved.
+ */
+export async function connectFromWebsite(apiUrl: string, token: string): Promise<Result<ExtensionState>> {
+  const old = await readConnection();
+  const state = await readState();
+  // The website may only hand over a session for our own server (or the one already in use),
+  // never point the extension at a new address.
+  const requested = cleanApiUrl(apiUrl);
+  const allowed = [cleanApiUrl(DEFAULT_API_URL), state.apiUrl ? cleanApiUrl(state.apiUrl) : null];
+  if (!requested || !allowed.includes(requested)) {
+    return fail('FORBIDDEN_PATH', 'This website tried to connect Verba to a different server.');
+  }
+  const result = await connectExtension({ apiUrl, token, dashboardUrl: state.dashboardUrl });
+  if (!result.ok) {
+    const cleaned = cleanApiUrl(apiUrl);
+    if (cleaned) await endServerSession(cleaned, token);
+    return result;
+  }
+  if (old && old.token !== token) await endServerSession(old.apiUrl, old.token);
+  return result;
+}
+
 /** Reads `{ token, me.mustChangePassword }` from an AuthSessionResponse, or null when malformed. */
 function readSession(data: unknown): { token: string; mustChangePassword: boolean } | null {
   if (!isRecord(data) || typeof data.token !== 'string' || data.token === '' || !isRecord(data.me)) return null;
