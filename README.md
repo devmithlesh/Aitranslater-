@@ -88,8 +88,8 @@ Keys can also come from env vars (see `apps/backend/.env.example`).
 
 ## Deployment
 
-**Backend (Render / Railway / Docker)**
-- Render: `render.yaml` is a ready Blueprint. Docker: `docker build -f apps/backend/Dockerfile -t verba-api .` (mount `/data`).
+**Backend (Render, Docker)**
+- Render: Docker runtime, root directory empty, Dockerfile path `./Dockerfile`, health check `/api/health` (`render.yaml` is the matching Blueprint). Locally: `docker build -t verba-api .`
 - Required env in production: `VERBA_ACCESS_TOKEN` (long random string), `VERBA_ENCRYPTION_KEY` (32 bytes, e.g. `openssl rand -hex 32`), `CORS_ORIGINS=https://your-dashboard.vercel.app`, `TRUST_PROXY=true` behind a proxy.
 - Free hosts have ephemeral disks → use **Supabase**: run `apps/backend/supabase/schema.sql` in the SQL editor, then set `STORAGE=supabase`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`.
 - Always serve the API over **HTTPS**.

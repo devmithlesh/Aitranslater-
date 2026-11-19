@@ -1,31 +1,33 @@
-# Render Blueprint for the Verba backend (https://render.com/docs/blueprint-spec)
+# Render Blueprint for the Verba backend (https://render.com/docs/blueprint-spec).
+# Builds the repo-root Dockerfile (Node 22, non-root user).
 services:
   - type: web
     name: verba-api
-    runtime: node
+    runtime: docker
     plan: free
-    rootDir: .
-    buildCommand: npm ci && npm run build -w @verba/backend
-    startCommand: node apps/backend/dist/index.js
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
     healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: TRUST_PROXY
         value: "true"
+      # Render's free disk is temporary, so storage lives in Supabase.
+      - key: STORAGE
+        value: supabase
       # Set these in the Render dashboard (never commit real values):
       - key: VERBA_ACCESS_TOKEN
         sync: false
       - key: VERBA_ENCRYPTION_KEY
         sync: false
       - key: CORS_ORIGINS
-        sync: false # e.g. https://your-dashboard.vercel.app
-      # Render's free disk is ephemeral — use Supabase for durable storage.
-      - key: STORAGE
-        value: supabase
+        sync: false # e.g. https://verba-trans-ai.netlify.app
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_EMAIL
         sync: false
       - key: GEMINI_API_KEY
         sync: false

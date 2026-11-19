@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Verba — AI Writing & Translation",
   "short_name": "Verba",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Translate and rewrite text in any box, and right-click selected text to get a simple AI explanation in the side panel.",
   "minimum_chrome_version": "116",
   "icons": {
@@ -45,7 +45,7 @@
   ],
   "permissions": ["storage", "alarms", "activeTab", "scripting", "contextMenus", "sidePanel"],
   "host_permissions": [
-    "https://verba-api-production.up.railway.app/*",
+    "https://aitranslater.onrender.com/*",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],

@@ -88,7 +88,7 @@ export default function PrivacyPage() {
               <strong className="text-fg">Supabase</strong> stores accounts, history and usage (database).
             </li>
             <li>
-              <strong className="text-fg">Railway</strong> runs the Verba server; <strong className="text-fg">Netlify</strong>{' '}
+              <strong className="text-fg">Render</strong> runs the Verba server; <strong className="text-fg">Netlify</strong>{' '}
               hosts the website.
             </li>
             <li>

@@ -57,7 +57,7 @@ async function writeStoredSecrets(path: string, secrets: StoredSecrets): Promise
 export async function loadSecrets(config: AppConfig): Promise<Secrets> {
   const secretsPath = join(config.dataDir, 'secrets.json');
   // Both secrets from the environment (the normal production setup): never touch the disk,
-  // which may be read-only or temporary on hosts like Render or Railway.
+  // which may be read-only or temporary on hosts like Render.
   if (config.accessToken && config.encryptionKey) {
     return {
       accessToken: config.accessToken,
