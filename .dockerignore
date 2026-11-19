@@ -1,0 +1,16 @@
+# Keep the build context small, and never send secrets or local data into an image.
+**/node_modules
+**/dist
+**/release
+**/.env
+**/.env.*
+!**/.env.example
+.git
+.github
+.vscode
+apps/backend/data
+apps/web
+!apps/web/package.json
+apps/extension
+!apps/extension/package.json
+*.log
