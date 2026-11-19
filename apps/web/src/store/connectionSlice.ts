@@ -1,5 +1,5 @@
 import { createSlice, type PayloadAction } from '@reduxjs/toolkit';
-import { normalizeApiUrl } from '@verba/shared';
+import { normalizeApiUrl, replaceRetiredApiUrl } from '@verba/shared';
 
 const STORAGE_KEY = 'verba.connection';
 export const DEFAULT_API_URL = normalizeApiUrl(import.meta.env.VITE_API_URL ?? 'http://localhost:8787');
@@ -19,7 +19,7 @@ function load(): ConnectionState {
       // A saved server URL only matters together with a token. Signed out, always use this build's
       // server (VITE_API_URL), so a stale saved URL (e.g. localhost from an earlier build) can't break login.
       if (typeof parsed.apiUrl === 'string' && typeof parsed.token === 'string' && parsed.token) {
-        return { apiUrl: parsed.apiUrl, token: parsed.token, unauthorized: false };
+        return { apiUrl: replaceRetiredApiUrl(parsed.apiUrl, DEFAULT_API_URL), token: parsed.token, unauthorized: false };
       }
     }
   } catch {

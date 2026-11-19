@@ -1,4 +1,5 @@
-import { DEFAULT_DASHBOARD_URL, STORAGE_KEYS, type ExtensionState, type StoredConnection } from '../shared/messages';
+import { replaceRetiredApiUrl } from '@verba/shared';
+import { DEFAULT_API_URL, DEFAULT_DASHBOARD_URL, STORAGE_KEYS, type ExtensionState, type StoredConnection } from '../shared/messages';
 import { isExtensionState, isStoredConnection } from './guards';
 
 export function emptyState(): ExtensionState {
@@ -17,7 +18,9 @@ export function emptyState(): ExtensionState {
 export async function readConnection(): Promise<StoredConnection | null> {
   const raw = await chrome.storage.local.get(STORAGE_KEYS.connection);
   const value: unknown = raw[STORAGE_KEYS.connection];
-  return isStoredConnection(value) ? value : null;
+  if (!isStoredConnection(value)) return null;
+  const apiUrl = replaceRetiredApiUrl(value.apiUrl, DEFAULT_API_URL);
+  return apiUrl === value.apiUrl ? value : { ...value, apiUrl };
 }
 
 export async function writeConnection(connection: StoredConnection): Promise<void> {
@@ -31,7 +34,9 @@ export async function clearConnection(): Promise<void> {
 export async function readState(): Promise<ExtensionState> {
   const raw = await chrome.storage.local.get(STORAGE_KEYS.state);
   const value: unknown = raw[STORAGE_KEYS.state];
-  return isExtensionState(value) ? value : emptyState();
+  if (!isExtensionState(value)) return emptyState();
+  const apiUrl = value.apiUrl === null ? null : replaceRetiredApiUrl(value.apiUrl, DEFAULT_API_URL);
+  return apiUrl === value.apiUrl ? value : { ...value, apiUrl };
 }
 
 /** Read-modify-write of the public state record. Callers are sequential per user action. */

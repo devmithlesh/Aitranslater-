@@ -20,6 +20,22 @@ export function normalizeApiUrl(url: string): string {
   return url.trim().replace(/\/+$/, '').replace(/\/api$/, '');
 }
 
+/** Hosts Verba's hosted API used to run on. Saved connections pointing there are moved to the current server. */
+const RETIRED_API_HOSTS: readonly string[] = ['verba-api-production.up.railway.app'];
+
+/**
+ * `savedUrl`, or `currentUrl` when `savedUrl` points at a retired Verba host. The token stays valid:
+ * the new server uses the same database and secrets.
+ */
+export function replaceRetiredApiUrl(savedUrl: string, currentUrl: string): string {
+  try {
+    if (RETIRED_API_HOSTS.includes(new URL(savedUrl).hostname)) return currentUrl;
+  } catch {
+    /* not a URL: leave it for the caller's own validation */
+  }
+  return savedUrl;
+}
+
 export function encodeConnectionCode(apiUrl: string, token: string): string {
   const payload: ConnectionCode = { v: 1, apiUrl: normalizeApiUrl(apiUrl), token };
   return PREFIX + toBase64Url(JSON.stringify(payload));
