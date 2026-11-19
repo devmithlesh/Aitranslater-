@@ -55,8 +55,19 @@ async function writeStoredSecrets(path: string, secrets: StoredSecrets): Promise
  * otherwise they are reused from `${DATA_DIR}/secrets.json` or generated once and persisted.
  */
 export async function loadSecrets(config: AppConfig): Promise<Secrets> {
-  await mkdir(config.dataDir, { recursive: true });
   const secretsPath = join(config.dataDir, 'secrets.json');
+  // Both secrets from the environment (the normal production setup): never touch the disk,
+  // which may be read-only or temporary on hosts like Render or Railway.
+  if (config.accessToken && config.encryptionKey) {
+    return {
+      accessToken: config.accessToken,
+      encryptionKey: parseEncryptionKey(config.encryptionKey),
+      tokenWasGenerated: false,
+      secretsPath,
+    };
+  }
+
+  await mkdir(config.dataDir, { recursive: true });
   const stored = await readStoredSecrets(secretsPath);
   let changed = false;
 

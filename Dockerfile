@@ -35,6 +35,10 @@ RUN npm ci --workspace @verba/backend --omit=dev --no-audit --no-fund && npm cac
 
 COPY --from=build /app/apps/backend/dist apps/backend/dist
 
+# Writable data dir for the non-root user. Only used when a secret is missing from the environment
+# or STORAGE=file; on Render this disk is temporary, so set the secrets and STORAGE=supabase there.
+RUN mkdir -p /app/data && chown node:node /app/data
+
 # Render sets PORT; the server listens on 0.0.0.0:$PORT (default 8787 when unset).
 EXPOSE 8787
 USER node
