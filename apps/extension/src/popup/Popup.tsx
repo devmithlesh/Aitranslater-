@@ -10,14 +10,17 @@ import { Skeleton } from '../components/ui/Spinner';
 import { useExtensionState } from '../hooks/useExtensionState';
 import { sendToBackground, type ExtensionError } from '../shared/messages';
 import { AuthPanel, type AuthMode } from './AuthPanel';
+import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { ExplainSelectionCard } from './ExplainSelectionCard';
 import { TranslatorView } from './translator/TranslatorView';
+import { WriteView } from './writer/WriteView';
 
 export function Popup() {
   const { state, loading, error, refresh } = useExtensionState();
   const [notice, setNotice] = useState<ExtensionError | null>(null);
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [signingOut, setSigningOut] = useState(false);
+  const [tab, setTab] = useState<'translate' | 'write'>('translate');
   const status = connectionStatus(state);
 
   async function handleOpenDashboard() {
@@ -99,8 +102,25 @@ export function Popup() {
 
         {state && connected && (
           <div className="min-w-0 space-y-3 p-3">
-            <ExplainSelectionCard />
-            <TranslatorView settings={state.settings} />
+            <SegmentedControl
+              label="Verba mode"
+              size="sm"
+              className="w-full"
+              value={tab}
+              onChange={setTab}
+              options={[
+                { value: 'translate', label: 'Translate' },
+                { value: 'write', label: 'Ask AI' },
+              ]}
+            />
+            {/* Hidden, not unmounted: remounting would re-run the translator's auto-translate and spend a credit. */}
+            <div hidden={tab !== 'translate'} className="space-y-3">
+              <ExplainSelectionCard settings={state.settings} />
+              <TranslatorView settings={state.settings} />
+            </div>
+            <div hidden={tab !== 'write'}>
+              <WriteView settings={state.settings} />
+            </div>
           </div>
         )}
       </div>

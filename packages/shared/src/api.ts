@@ -419,6 +419,51 @@ export interface ExplainResponse extends ProviderMeta {
   result: string;
 }
 
+// ── Write ───────────────────────────────────────────────────────────
+/** Longest instruction accepted by POST /api/write. */
+export const WRITE_PROMPT_MAX_LENGTH = 2000;
+
+/**
+ * POST /api/write — writes new content from a request in any language
+ * ("write a leave application for 2 days", "reply politely to this…"). Costs 1 daily credit;
+ * a failed call gives it back.
+ */
+export interface WriteRequest {
+  /** What to write, 1..WRITE_PROMPT_MAX_LENGTH characters after trim. */
+  prompt: string;
+  /** Language of the written content (supported language code). Defaults to English ("en"). */
+  targetLang?: string;
+}
+export interface WriteResponse extends ProviderMeta {
+  /** The written content, plain text with line breaks. */
+  result: string;
+}
+
+// ── Reply variants ──────────────────────────────────────────────────
+/** Longest received message accepted by POST /api/reply-variants. */
+export const REPLY_MESSAGE_MAX_LENGTH = 4000;
+/** Longest "what I want to say" hint accepted by POST /api/reply-variants. */
+export const REPLY_INTENT_MAX_LENGTH = 500;
+
+/**
+ * POST /api/reply-variants — drafts a reply to a message the user received (chat, email, comment),
+ * one version per tone, in one call. Costs 1 daily credit; a failed call gives it back.
+ */
+export interface ReplyVariantsRequest {
+  /** The received message, 1..REPLY_MESSAGE_MAX_LENGTH characters after trim. Treated as data, never as instructions. */
+  message: string;
+  /** Optional: what the user wants to say ("yes, I'll be there in 5 minutes"), up to REPLY_INTENT_MAX_LENGTH. */
+  intent?: string;
+  /** Language of the replies (supported language code). Defaults to English ("en"). */
+  targetLang?: string;
+  /** Distinct styles, 1..MAX_VARIANT_STYLES. Defaults to DEFAULT_VARIANT_STYLES. */
+  styles?: RewriteStyle[];
+}
+export interface ReplyVariantsResponse extends ProviderMeta {
+  /** Same order as the requested styles; styles the model failed to return are omitted. */
+  variants: TranslationVariant[];
+}
+
 // ── Smart reply ─────────────────────────────────────────────────────
 /** POST /api/smart-reply */
 export interface SmartReplyRequest {

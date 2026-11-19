@@ -57,7 +57,7 @@ function isInsertResult(value: unknown): value is InsertResult {
 /** Returned by the injected reader when a frame has no bridge (content script not running there). */
 const MISSING_BRIDGE = 'verba:missing-bridge';
 
-type FrameResult = { frameId: number; result?: unknown };
+export type FrameResult = { frameId: number; result?: unknown };
 
 type BridgeReader = 'readFocused' | 'readSelection';
 
@@ -88,7 +88,9 @@ async function readActiveTab(method: BridgeReader): Promise<{ tabId: number; res
     const tabId = tab.id;
 
     let results = await readAllFrames(tabId, method);
-    if (results.length > 0 && results.every((entry) => entry.result === MISSING_BRIDGE)) {
+    // Any frame without the bridge: tabs opened before Verba was installed or reloaded, and frames
+    // that outlived a reload while the page kept adding new ones (Gmail Chat), so only some have it.
+    if (results.some((entry) => entry.result === MISSING_BRIDGE)) {
       // content.js guards against running twice, so injecting into frames that already have it is harmless.
       await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ['content.js'] });
       results = await readAllFrames(tabId, method);
@@ -100,22 +102,35 @@ async function readActiveTab(method: BridgeReader): Promise<{ tabId: number; res
   }
 }
 
-function pickNewest(results: readonly FrameResult[], tabId: number): FocusedField | null {
+/**
+ * True when `a` should be chosen over `b`. A box the user focused always beats a guessed one; between
+ * focused boxes the newest wins; between guessed boxes the higher guessScore wins.
+ */
+function beats(a: FocusedFieldInfo, b: FocusedFieldInfo): boolean {
+  const aGuessed = a.guessed === true;
+  const bGuessed = b.guessed === true;
+  if (aGuessed !== bGuessed) return !aGuessed;
+  if (!aGuessed) return a.focusedAt > b.focusedAt;
+  return (a.guessScore ?? 0) > (b.guessScore ?? 0);
+}
+
+/** The best field across frames (see `beats`), or null when no frame reported one. Exported for tests. */
+export function pickBest(results: readonly FrameResult[], tabId: number): FocusedField | null {
   let best: FocusedField | null = null;
   for (const entry of results) {
     const info = entry.result;
     if (!isFieldInfo(info)) continue;
-    if (best === null || info.focusedAt > best.info.focusedAt) {
+    if (best === null || beats(info, best.info)) {
       best = { info, tabId, frameId: entry.frameId };
     }
   }
   return best;
 }
 
-/** Finds the most recently focused editable field across all frames of the active tab, or null. */
+/** Finds the best editable field across all frames of the active tab, or null. */
 export async function readFocusedField(): Promise<FocusedField | null> {
   const read = await readActiveTab('readFocused');
-  return read ? pickNewest(read.results, read.tabId) : null;
+  return read ? pickBest(read.results, read.tabId) : null;
 }
 
 export interface PageSelection {

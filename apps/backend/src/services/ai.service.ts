@@ -5,10 +5,12 @@ import {
   buildAssistantPrompt,
   buildExplainPrompt,
   buildGrammarPrompt,
+  buildReplyVariantsPrompt,
   buildRewritePrompt,
   buildSmartReplyPrompt,
   buildSummarizePrompt,
   buildTranslationVariantsPrompt,
+  buildWritePrompt,
   outputTokenBudget,
   variantsTokenBudget,
 } from './prompts';
@@ -29,6 +31,8 @@ import type {
   RewriteRequest,
   ProviderMeta,
   RewriteResponse,
+  ReplyVariantsRequest,
+  ReplyVariantsResponse,
   SmartReplyRequest,
   SmartReplyResponse,
   SummarizeRequest,
@@ -36,6 +40,8 @@ import type {
   TranslateVariantsRequest,
   TranslateVariantsResponse,
   TranslationVariant,
+  WriteRequest,
+  WriteResponse,
 } from '@verba/shared';
 import { LOCAL_USER_ID } from '../middleware/auth';
 import { badRequest, notFound } from '../utils/errors';
@@ -201,6 +207,28 @@ export class AiService {
     return { result: result.value, ...this.meta(result, historyId) };
   }
 
+  async write(args: { userId: string; client: ClientKind; request: WriteRequest; signal: AbortSignal }): Promise<WriteResponse> {
+    const { userId, client, request, signal } = args;
+    const settings = await this.settings.get(userId);
+    // Write defaults to English; the popup can pick another language.
+    const targetLang = request.targetLang ?? 'en';
+    const prompt = buildWritePrompt({ prompt: request.prompt, targetLanguageName: languageName(targetLang) });
+    // Like translateVariants: users have no AI keys of their own, so the admin's provider chain serves the call.
+    const result = await this.generateText(LOCAL_USER_ID, prompt, request.prompt, 0.6, signal);
+    const historyId = await this.history.record({
+      userId,
+      client,
+      type: 'assistant',
+      input: request.prompt,
+      output: result.value,
+      meta: { provider: result.provider, model: result.model, targetLang, assistantName: 'Write' },
+      languages: [targetLang],
+      chars: request.prompt.length,
+      saveHistory: settings.saveHistory,
+    });
+    return { result: result.value, ...this.meta(result, historyId) };
+  }
+
   async explain(args: { userId: string; client: ClientKind; request: ExplainRequest; signal: AbortSignal }): Promise<ExplainResponse> {
     const { userId, client, request, signal } = args;
     const settings = await this.settings.get(userId);
@@ -250,6 +278,56 @@ export class AiService {
       saveHistory: settings.saveHistory,
     });
     return { replies: result.value, ...this.meta(result, historyId) };
+  }
+
+  /** Reply drafts for a received message, one per style. Same LLM path and parser as translateVariants. */
+  async replyVariants(args: {
+    userId: string;
+    client: ClientKind;
+    request: ReplyVariantsRequest;
+    signal: AbortSignal;
+  }): Promise<ReplyVariantsResponse> {
+    const { userId, client, request, signal } = args;
+    const settings = await this.settings.get(userId);
+    const targetLang = request.targetLang ?? 'en';
+    const styles: readonly RewriteStyle[] = request.styles ?? [...DEFAULT_VARIANT_STYLES];
+    const prompt = buildReplyVariantsPrompt({
+      message: request.message,
+      intent: request.intent,
+      targetLanguageName: languageName(targetLang),
+      styles,
+    });
+    // Users have no AI keys of their own: the admin's provider chain serves the call.
+    // Settings and history stay with the caller (userId).
+    const result = await this.registry.runLlm(
+      LOCAL_USER_ID,
+      {
+        ...prompt,
+        json: true,
+        temperature: 0.7,
+        maxTokens: variantsTokenBudget(request.message.length, styles.length),
+        signal,
+      },
+      (raw) => parseTranslationVariants(raw, request.message, styles),
+      request.message.length,
+    );
+    let historyId: string | undefined;
+    try {
+      historyId = await this.history.record({
+        userId,
+        client,
+        type: 'assistant',
+        input: request.message,
+        output: result.value.variants.map((variant) => variant.text).join('\n\n'),
+        meta: { provider: result.provider, model: result.model, targetLang, assistantName: 'Reply' },
+        languages: [targetLang],
+        chars: request.message.length,
+        saveHistory: settings.saveHistory,
+      });
+    } catch (err) {
+      console.warn('[verba] could not record history:', err instanceof Error ? err.message : err);
+    }
+    return { variants: result.value.variants, ...this.meta(result, historyId) };
   }
 
   async translateVariants(args: {

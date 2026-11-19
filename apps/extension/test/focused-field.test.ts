@@ -2,6 +2,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { isActiveHere } from '../src/content/state';
 import { installPageBridge, insert, readFocused, startFocusTracking } from '../src/content/focused-field';
 import { MAX_FIELD_TEXT, PAGE_BRIDGE_KEY, type PageBridge } from '../src/shared/page-bridge';
+import { pickBest } from '../src/popup/translator/pageBridgeClient';
 
 vi.mock('../src/content/state', () => ({
   isActiveHere: vi.fn(() => true),
@@ -90,10 +91,10 @@ describe('focus tracking', () => {
     expect(readFocused()?.text.length).toBe(MAX_FIELD_TEXT);
   });
 
-  it('returns null for an empty or whitespace-only field', () => {
+  it('reports an empty or whitespace-only field with empty text, so a reply can be inserted into it', () => {
     const ta = textarea('   \n  ');
     ta.focus();
-    expect(readFocused()).toBeNull();
+    expect(readFocused()).toMatchObject({ text: '', kind: 'input' });
   });
 
   it('skips password inputs and clears the previous field', () => {
@@ -152,6 +153,161 @@ describe('focus tracking', () => {
   });
 });
 
+/** jsdom has no layout: give an element a box on screen. */
+function place<T extends HTMLElement>(el: T, top: number, height = 40, width = 300): T {
+  Object.defineProperty(el, 'getBoundingClientRect', {
+    value: () => ({ top, bottom: top + height, left: 0, right: width, width, height, x: 0, y: top, toJSON: () => ({}) }),
+    configurable: true,
+  });
+  return el;
+}
+
+describe('message box guess (nothing focused)', () => {
+  beforeEach(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    // Forget the field tracked by earlier tests: removing it from the document makes it stale.
+    readFocused();
+  });
+
+  it('picks the visible box lowest on the screen and inserts into it', async () => {
+    const search = place(textarea(''), 10);
+    const composer = place(editable(''), 600);
+    expect(readFocused()).toMatchObject({ text: '', kind: 'contenteditable', focusedAt: 1, guessed: true });
+
+    stubExecCommand(false);
+    await insert('Not yet, sir!');
+    expect(search.value).toBe('');
+    // jsdom cannot run the rich-editor insert, but it must target the composer, not the search box.
+    expect(document.activeElement).toBe(composer);
+  });
+
+  it('never picks password, read-only, hidden or off-screen fields', () => {
+    place(input({ type: 'password' }), 700);
+    const ro = place(textarea('x'), 650);
+    ro.readOnly = true;
+    place(textarea('hidden'), 600, 0, 0);
+    place(textarea('below the fold'), 2000);
+    const ok = place(textarea('draft'), 300);
+    expect(readFocused()?.text).toBe('draft');
+    expect(ok.value).toBe('draft');
+  });
+
+  it('returns null when the page has no writable box', () => {
+    place(input({ type: 'password' }), 500);
+    expect(readFocused()).toBeNull();
+  });
+
+  it('prefers the field the user actually focused over the guess', () => {
+    place(textarea('bottom box'), 700);
+    const top = place(textarea('clicked box'), 50);
+    top.focus();
+    expect(readFocused()).toMatchObject({ text: 'clicked box', guessed: false });
+  });
+});
+
+describe('guess: shadow DOM, exclusions and selection ranking', () => {
+  beforeEach(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+    window.getSelection()?.removeAllRanges();
+    readFocused();
+  });
+
+  it('finds a contenteditable inside an open shadow root and inserts into it', async () => {
+    const composer = append(document.createElement('x-composer'));
+    const shadow = composer.attachShadow({ mode: 'open' });
+    const box = document.createElement('div');
+    box.setAttribute('contenteditable', 'true');
+    shadow.appendChild(box);
+    place(box, 500);
+    box.addEventListener('beforeinput', (event) => {
+      event.preventDefault();
+      box.textContent = 'shadow reply';
+    });
+
+    expect(readFocused()).toMatchObject({ kind: 'contenteditable', guessed: true, text: '' });
+    expect(await insert('shadow reply')).toEqual({ ok: true });
+    expect(box.textContent).toBe('shadow reply');
+  });
+
+  it('ignores search, email, combobox, search-named and Verba-hosted boxes', () => {
+    place(input({ type: 'search' }), 700);
+    place(input({ type: 'email' }), 680);
+    place(input({ type: 'text', placeholder: 'Search messages' }), 660);
+    const combo = place(editable('combo'), 640);
+    combo.setAttribute('role', 'combobox');
+    const verba = append(document.createElement('verba-root'));
+    const verbaBox = document.createElement('textarea');
+    verba.attachShadow({ mode: 'open' }).appendChild(verbaBox);
+    place(verbaBox, 620);
+    place(textarea('the real draft'), 300);
+
+    expect(readFocused()).toMatchObject({ text: 'the real draft', guessed: true });
+  });
+
+  it('without a selection, the lowest box wins', () => {
+    place(textarea('upper'), 100);
+    place(textarea('lower'), 500);
+    expect(readFocused()?.text).toBe('lower');
+  });
+
+  describe('with a text selection', () => {
+    let selection: { mockRestore(): void } | undefined;
+
+    afterEach(() => {
+      selection?.mockRestore();
+      selection = undefined;
+    });
+
+    /** Fakes a selection whose range starts at `top` (jsdom has no range layout). */
+    function selectAt(top: number): void {
+      const range = {
+        getBoundingClientRect: () => ({ top, bottom: top + 20, left: 0, right: 100, width: 100, height: 20, x: 0, y: top, toJSON: () => ({}) }),
+      };
+      const fake = {
+        rangeCount: 1,
+        isCollapsed: false,
+        getRangeAt: () => range,
+        removeAllRanges: () => {},
+        addRange: () => {},
+        toString: () => 'selected text',
+      };
+      selection = vi.spyOn(window, 'getSelection').mockReturnValue(fake as unknown as Selection);
+    }
+
+    it('the box just below the selected text beats a box far lower on the page', () => {
+      selectAt(100);
+      place(textarea('far box'), 600);
+      place(editable('reply box'), 140);
+      expect(readFocused()).toMatchObject({ text: 'reply box', kind: 'contenteditable', guessed: true });
+    });
+  });
+});
+
+describe('pickBest (choosing between frames)', () => {
+  function frame(frameId: number, info: Record<string, unknown>) {
+    return { frameId, result: { text: 'x', focusedAt: 1, kind: 'input', site: 'example.test', ...info } };
+  }
+
+  it('a focused field beats a guessed one even when the guess scores higher', () => {
+    const best = pickBest([frame(1, { guessed: true, focusedAt: 1, guessScore: 999 }), frame(2, { focusedAt: 50 })], 7);
+    expect(best).toMatchObject({ frameId: 2, tabId: 7 });
+  });
+
+  it('among focused fields the newest wins', () => {
+    const best = pickBest([frame(1, { focusedAt: 50 }), frame(2, { focusedAt: 90 })], 7);
+    expect(best?.frameId).toBe(2);
+  });
+
+  it('among guessed fields the higher guessScore wins', () => {
+    const best = pickBest([frame(1, { guessed: true, focusedAt: 1, guessScore: 30 }), frame(2, { guessed: true, focusedAt: 1, guessScore: 70 })], 7);
+    expect(best?.frameId).toBe(2);
+  });
+
+  it('returns null when no frame reported a field', () => {
+    expect(pickBest([{ frameId: 0, result: 'verba:missing-bridge' }], 7)).toBeNull();
+  });
+});
+
 describe('insert', () => {
   it('replaces the whole textarea value and fires an input event', async () => {
     const ta = textarea('old draft that is replaced');
@@ -170,8 +326,10 @@ describe('insert', () => {
     expect(inputEvents.some((event) => event.type === 'input' && event.bubbles)).toBe(true);
   });
 
-  it('reports failure for a contenteditable when nothing applies, without throwing', async () => {
+  it('reports failure for a framework editor when nothing applies, without throwing', async () => {
+    // A plain contenteditable would get the direct-write fallback; a framework editor must not.
     const host = editable('draft');
+    host.setAttribute('data-lexical-editor', 'true');
     host.focus();
 
     const result = await insert('Hello');
@@ -197,6 +355,75 @@ describe('insert', () => {
     expect(ta.value).toBe('draft');
   });
 });
+
+describe('insert into rich editors', () => {
+  it('inserts through a beforeinput the editor handles, exactly once', async () => {
+    const host = editable('old text');
+    host.focus();
+    let handled = 0;
+    host.addEventListener('beforeinput', (event) => {
+      event.preventDefault();
+      handled += 1;
+      host.textContent = 'Reply from Verba';
+    });
+
+    expect(await insert('Reply from Verba')).toEqual({ ok: true });
+    expect(host.textContent).toBe('Reply from Verba');
+    expect(handled).toBe(1);
+  });
+
+  it('falls back to setting the text on a plain contenteditable when nothing else works', async () => {
+    const host = editable('draft');
+    host.focus();
+    // execCommand is stubbed to fail (beforeinput and paste are ignored by this box).
+    expect(await insert('Last resort reply')).toEqual({ ok: true });
+    expect(host.textContent).toBe('Last resort reply');
+  });
+
+  it('leaves a framework-marked editor untouched when it ignores every method', async () => {
+    const host = editable('Keep me');
+    host.setAttribute('data-lexical-editor', 'true');
+    host.focus();
+
+    const result = await insert('Overwrite');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toMatch(/blocked automatic insert/);
+    expect(host.textContent).toBe('Keep me');
+  });
+
+  it('does not insert twice when the editor applies execCommand asynchronously', async () => {
+    const host = editable('draft');
+    host.focus();
+    let pastes = 0;
+    let beforeInputs = 0;
+    host.addEventListener('paste', () => {
+      pastes += 1;
+    });
+    host.addEventListener('beforeinput', () => {
+      beforeInputs += 1;
+    });
+    Object.defineProperty(document, 'execCommand', {
+      value: vi.fn(() => {
+        setTimeout(() => {
+          host.textContent = 'Late reply';
+        }, 120);
+        return true;
+      }),
+      configurable: true,
+      writable: true,
+    });
+
+    expect(await insert('Late reply')).toEqual({ ok: true });
+    await delay(300);
+    expect(host.textContent).toBe('Late reply');
+    expect(pastes).toBe(0);
+    expect(beforeInputs).toBe(0);
+  });
+});
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 describe('page bridge', () => {
   it('is installed on globalThis under PAGE_BRIDGE_KEY', () => {

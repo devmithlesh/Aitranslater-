@@ -22,6 +22,36 @@ export function activeChain(): Element[] | null {
   return chain;
 }
 
+/** The node's element ancestors, crossing open shadow boundaries (closest() stops at them). */
+export function composedAncestors(node: Node): Element[] {
+  const out: Element[] = [];
+  let current: Node | null = node;
+  while (current) {
+    if (current instanceof Element) out.push(current);
+    current = current instanceof ShadowRoot ? current.host : current.parentNode;
+  }
+  return out;
+}
+
+/** True when `el` is inside Verba's own UI host, including through shadow boundaries. */
+export function isInsideVerba(el: Node): boolean {
+  return composedAncestors(el).some((ancestor) => ancestor.localName === HOST_TAG);
+}
+
+/**
+ * Every element matching `selector` under `root`, descending into open shadow roots.
+ * Closed shadow roots are not reachable and are skipped.
+ */
+export function deepQueryAll<T extends Element>(root: Document | ShadowRoot, selector: string): T[] {
+  const found: T[] = [];
+  for (const el of Array.from(root.querySelectorAll<T>(selector))) found.push(el);
+  for (const host of Array.from(root.querySelectorAll('*'))) {
+    if (!host.shadowRoot) continue;
+    for (const el of deepQueryAll<T>(host.shadowRoot, selector)) found.push(el);
+  }
+  return found;
+}
+
 /** Selection object for the tree that holds `node` (open shadow roots expose their own). */
 export function selectionFor(node: Node): Selection | null {
   const rootNode = node.getRootNode();

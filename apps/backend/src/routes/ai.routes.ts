@@ -15,6 +15,8 @@ export function createAiRouter(services: Services, aiLimiter: RequestHandler): R
   router.post('/explain', aiLimiter, ctrl.explain);
   router.post('/smart-reply', aiLimiter, ctrl.smartReply);
   router.post('/translate-variants', aiLimiter, ctrl.translateVariants);
+  router.post('/write', aiLimiter, ctrl.write);
+  router.post('/reply-variants', aiLimiter, ctrl.replyVariants);
   router.post('/ai-assistant', aiLimiter, ctrl.assistant);
   return router;
 }

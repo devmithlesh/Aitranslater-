@@ -20,6 +20,16 @@ export interface FocusedFieldInfo {
   kind: 'input' | 'contenteditable';
   /** location.hostname of the frame, for display ("web.whatsapp.com"). */
   site: string;
+  /**
+   * True when the user never focused a box and Verba picked the page's message box itself.
+   * Insert may target it, but its text must not be auto-read or auto-translated.
+   */
+  guessed?: boolean;
+  /**
+   * How well a guessed box fits (higher is better), used to choose between frames when every
+   * candidate is guessed. Only set when `guessed` is true.
+   */
+  guessScore?: number;
 }
 
 export type InsertResult = { ok: true } | { ok: false; reason: string };

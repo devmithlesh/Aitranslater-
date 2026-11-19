@@ -12,13 +12,16 @@ import {
   LLM_PROVIDER_IDS,
   MAX_INPUT_CHARS,
   MAX_VARIANT_STYLES,
+  REPLY_INTENT_MAX_LENGTH,
   REPLY_LENGTHS,
+  REPLY_MESSAGE_MAX_LENGTH,
   REPLY_STYLES,
   REWRITE_STYLES,
   SUMMARY_FORMATS,
   TOOLBAR_ACTIONS,
   TRANSLATION_PROVIDER_IDS,
   TRANSLATION_TONES,
+  WRITE_PROMPT_MAX_LENGTH,
   getLanguage,
   isSupportedLanguage,
 } from '@verba/shared';
@@ -106,10 +109,28 @@ export const smartReplySchema = z.object({
   count: z.number().int().min(1).max(3).optional(),
 });
 
+export const writeSchema = z.object({
+  prompt: textInput(WRITE_PROMPT_MAX_LENGTH),
+  targetLang: targetLanguage.optional(),
+});
+
 export const translateVariantsSchema = z.object({
   text: textInput(),
   sourceLang: sourceLanguage,
   targetLang: targetLanguage,
+  styles: z.array(z.enum(REWRITE_STYLES)).min(1).max(MAX_VARIANT_STYLES).transform(unique).optional(),
+});
+
+/** POST /api/reply-variants: a received message plus an optional hint of what the user wants to say. */
+export const replyVariantsSchema = z.object({
+  message: textInput(REPLY_MESSAGE_MAX_LENGTH),
+  intent: z
+    .string()
+    .trim()
+    .max(REPLY_INTENT_MAX_LENGTH, `Intent must be ${REPLY_INTENT_MAX_LENGTH} characters or fewer.`)
+    .optional()
+    .transform((value) => value || undefined),
+  targetLang: targetLanguage.optional(),
   styles: z.array(z.enum(REWRITE_STYLES)).min(1).max(MAX_VARIANT_STYLES).transform(unique).optional(),
 });
 

@@ -110,7 +110,8 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
     void readFocusedField().then((found) => {
       if (!alive) return;
       setField(found);
-      if (found) setText((prev) => (prev === '' ? found.info.text : prev));
+      // A box Verba picked itself (the user never clicked it) is only an insert target: never prefill from it.
+      if (found && !found.info.guessed) setText((prev) => (prev === '' ? found.info.text : prev));
     });
     return () => {
       alive = false;
@@ -121,7 +122,7 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
   useEffect(() => {
     if (autoRan.current || requestSeq.current > 0 || field === undefined || !targetLoaded) return;
     autoRan.current = true;
-    if (field && field.info.text.trim()) {
+    if (field && !field.info.guessed && field.info.text.trim()) {
       void run(field.info.text.trim(), target);
     }
   }, [field, targetLoaded, target, run]);
@@ -169,7 +170,7 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
         Reading the text box…
       </p>
     );
-  } else if (field && field.info.text.trim()) {
+  } else if (field && !field.info.guessed && field.info.text.trim()) {
     hint = <p className="truncate text-[11.5px] text-muted">From the box on {field.info.site}</p>;
   } else {
     hint = (

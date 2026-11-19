@@ -44,6 +44,8 @@ const USER_ROUTES: readonly RouteRule[] = [
   { method: 'POST', path: '/auth/change-password' },
   { method: 'POST', path: '/auth/sessions' },
   { method: 'POST', path: '/translate-variants' },
+  { method: 'POST', path: '/write' },
+  { method: 'POST', path: '/reply-variants' },
   { method: 'GET', path: '/settings' },
   { method: 'PUT', path: '/settings' },
   { method: 'GET', path: '/assistants' },

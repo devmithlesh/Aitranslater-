@@ -1,19 +1,30 @@
-import { Lightbulb } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import type { UserSettings } from '@verba/shared';
+import { Lightbulb, MessageSquareReply } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
 import { Button } from '../components/ui/Button';
 import { PENDING_EXPLAIN_KEY, cleanSelection, type PendingExplain } from '../shared/explain';
 import { readPageSelection, type PageSelection } from './translator/pageBridgeClient';
+import { ReplyPanel } from './reply/ReplyPanel';
 
 const PREVIEW_CHARS = 140;
 
+export interface ExplainSelectionCardProps {
+  /** Passed to the reply panel for its favourite languages. */
+  settings?: UserSettings | null;
+}
+
 /**
  * Shown at the top of the popup when text is highlighted on the page: one click opens the side
- * panel with a simple explanation. Renders nothing when there is no selection (or the page cannot
- * be read, e.g. Chrome's PDF viewer, where the right-click menu still works).
+ * panel with a simple explanation, or drafts replies to it. Renders nothing when there is no
+ * selection (or the page cannot be read, e.g. Chrome's PDF viewer, where the right-click menu still works).
  */
-export function ExplainSelectionCard() {
+export function ExplainSelectionCard({ settings = null }: ExplainSelectionCardProps) {
   const [selection, setSelection] = useState<PageSelection | null>(null);
   const [failed, setFailed] = useState(false);
+  const [replyOpen, setReplyOpen] = useState(false);
+  /** Set on the first open and kept mounted after that, so toggling does not request (and spend) new replies. */
+  const [replyMounted, setReplyMounted] = useState(false);
+  const replyId = useId();
 
   useEffect(() => {
     let alive = true;
@@ -49,15 +60,36 @@ export function ExplainSelectionCard() {
     >
       <p className="text-[11px] font-semibold uppercase tracking-wide text-subtle">You selected</p>
       <p className="line-clamp-3 break-words text-[12.5px] leading-5 text-fg">{preview}</p>
-      <Button
-        size="sm"
-        icon={Lightbulb}
-        fullWidth
-        onClick={() => explain(selection.tabId, text, selection.info.site)}
-      >
-        Explain this simply
-      </Button>
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          size="sm"
+          icon={Lightbulb}
+          fullWidth
+          onClick={() => explain(selection.tabId, text, selection.info.site)}
+        >
+          Explain
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          icon={MessageSquareReply}
+          fullWidth
+          aria-expanded={replyOpen}
+          aria-controls={replyId}
+          onClick={() => {
+            setReplyMounted(true);
+            setReplyOpen((open) => !open);
+          }}
+        >
+          Reply to this
+        </Button>
+      </div>
       {failed && <p className="text-[12px] text-danger">Could not open the side panel. Try right-click → Explain with Verba.</p>}
+      {replyMounted && (
+        <div id={replyId} hidden={!replyOpen} className="min-w-0 rounded-xl bg-surface p-3 shadow-card">
+          <ReplyPanel message={text} settings={settings} />
+        </div>
+      )}
     </section>
   );
 }
