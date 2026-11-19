@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import type { SupabaseClient, SupabaseClientOptions } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ACTIVITY_TYPES, type CustomAssistant, type HistoryItem, type UserSettings } from '@verba/shared';
 import { LOCAL_USER_ID } from '../middleware/auth';
@@ -169,6 +169,15 @@ function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit): Promise
   return fetch(input, { ...init, signal });
 }
 
+type RealtimeOptions = NonNullable<SupabaseClientOptions<'public'>['realtime']>;
+
+/** Stand-in WebSocket for supabase-js. Realtime is never used, so constructing it is a bug. */
+class RealtimeUnused {
+  constructor() {
+    throw new Error('Supabase Realtime is not used by Verba.');
+  }
+}
+
 export class SupabaseStorage implements Storage {
   readonly kind = 'supabase' as const;
   private readonly client: SupabaseClient;
@@ -178,6 +187,9 @@ export class SupabaseStorage implements Storage {
       auth: { persistSession: false, autoRefreshToken: false },
       // A hung request must not hold the credit/usage locks forever: every call gets a deadline.
       global: { fetch: fetchWithTimeout },
+      // Verba never uses Realtime. Without a transport, supabase-js looks for a native WebSocket
+      // when the client is created and fails on Node 20; this stub is never constructed.
+      realtime: { transport: RealtimeUnused as unknown as NonNullable<RealtimeOptions['transport']> },
     });
   }
 
