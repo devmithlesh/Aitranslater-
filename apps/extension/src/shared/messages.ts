@@ -1,10 +1,9 @@
 /**
  * Message contract between extension contexts.
  *
- *   content script ─┐
- *   popup / options ┼──► background service worker ──► Verba backend (fetch)
- *                   │
- *   background ─────┴──► content script  (commands / context-menu actions)
+ *   popup / options ───► background service worker ──► Verba backend (fetch)
+ *   content script ────► background (only `verba:open-popup`, from the in-page button)
+ *   background ────────► content script  (commands / context-menu actions)
  *
  * Only the background worker talks to the backend and only it reads the
  * access token. Content scripts never see the token.
@@ -75,7 +74,9 @@ export type BackgroundRequest =
   | { type: 'verba:sync' }
   | { type: 'verba:open-dashboard'; path?: string }
   /** Content scripts cannot call chrome.runtime.openOptionsPage themselves. */
-  | { type: 'verba:open-options' };
+  | { type: 'verba:open-options' }
+  /** Opens the toolbar popup. The only request a content script (the in-page Verba button) may send. */
+  | { type: 'verba:open-popup' };
 
 /** Response type for each request `type`. */
 export interface BackgroundResponseMap {
@@ -87,6 +88,7 @@ export interface BackgroundResponseMap {
   'verba:sync': Result<ExtensionState>;
   'verba:open-dashboard': Result<null>;
   'verba:open-options': Result<null>;
+  'verba:open-popup': Result<null>;
 }
 
 

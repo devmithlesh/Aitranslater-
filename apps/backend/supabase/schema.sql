@@ -112,3 +112,16 @@ alter table public.app_users enable row level security;
 alter table public.app_sessions enable row level security;
 alter table public.app_config enable row level security;
 alter table public.credit_ledgers enable row level security;
+
+-- Product feedback from the extension. Not deleted with the account (no FK); read it in the Supabase table editor.
+create table if not exists public.feedback (
+  id text primary key,
+  user_id text not null,
+  category text not null check (category in ('idea', 'bug', 'other')),
+  message text not null check (char_length(message) <= 2000),
+  client text not null check (client in ('web', 'extension')),
+  version text null,
+  created_at timestamptz not null default now()
+);
+create index if not exists feedback_created_idx on public.feedback (created_at desc);
+alter table public.feedback enable row level security;

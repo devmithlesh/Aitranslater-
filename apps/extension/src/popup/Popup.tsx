@@ -1,4 +1,4 @@
-import { ExternalLink, LogOut, Settings } from 'lucide-react';
+import { ExternalLink, LogOut, MessageSquarePlus, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { connectionStatus, StatusDot } from '../components/ConnectionStatus';
 import { localError } from '../components/errors';
@@ -12,6 +12,7 @@ import { sendToBackground, type ExtensionError } from '../shared/messages';
 import { AuthPanel, type AuthMode } from './AuthPanel';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { ExplainSelectionCard } from './ExplainSelectionCard';
+import { FeedbackPanel } from './feedback/FeedbackPanel';
 import { TranslatorView } from './translator/TranslatorView';
 import { WriteView } from './writer/WriteView';
 
@@ -21,6 +22,7 @@ export function Popup() {
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [signingOut, setSigningOut] = useState(false);
   const [tab, setTab] = useState<'translate' | 'write'>('translate');
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const status = connectionStatus(state);
 
   async function handleOpenDashboard() {
@@ -63,6 +65,13 @@ export function Popup() {
           )}
           {connected && (
             <>
+              <IconButton
+                icon={MessageSquarePlus}
+                label="Send feedback"
+                size="sm"
+                active={feedbackOpen}
+                onClick={() => setFeedbackOpen((open) => !open)}
+              />
               <IconButton icon={ExternalLink} label="Open dashboard" size="sm" onClick={() => void handleOpenDashboard()} />
               <IconButton
                 icon={LogOut}
@@ -100,8 +109,10 @@ export function Popup() {
           <AuthPanel mode={authMode} onModeChange={setAuthMode} onSignedIn={refresh} />
         )}
 
+        {state && connected && feedbackOpen && <FeedbackPanel onBack={() => setFeedbackOpen(false)} />}
+
         {state && connected && (
-          <div className="min-w-0 space-y-3 p-3">
+          <div hidden={feedbackOpen} className="min-w-0 space-y-4 p-4">
             <SegmentedControl
               label="Verba mode"
               size="sm"
@@ -116,18 +127,18 @@ export function Popup() {
             {/* Hidden, not unmounted: remounting would re-run the translator's auto-translate and spend a credit. */}
             <div hidden={tab !== 'translate'} className="space-y-3">
               <ExplainSelectionCard settings={state.settings} />
-              <TranslatorView settings={state.settings} />
+              <TranslatorView settings={state.settings} active={tab === 'translate' && !feedbackOpen} />
             </div>
             <div hidden={tab !== 'write'}>
-              <WriteView settings={state.settings} />
+              <WriteView settings={state.settings} active={tab === 'write' && !feedbackOpen} />
             </div>
           </div>
         )}
       </div>
 
       <footer className="min-w-0 border-t border-border bg-surface px-3 py-2 text-[11px] leading-4 text-subtle">
-        <span className="font-medium text-muted">Alt+Shift+V</span> in any text box to open Verba. Select text and{' '}
-        <span className="font-medium text-muted">right-click → Explain with Verba</span> (works on PDFs too).
+        <span className="font-medium text-muted">Alt+Shift+V</span> in any text box · select text, then{' '}
+        <span className="font-medium text-muted">right-click → Explain</span>
       </footer>
     </div>
   );

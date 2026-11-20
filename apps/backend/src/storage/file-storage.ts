@@ -6,6 +6,7 @@ import type {
   ActivityAggregates,
   CreditLedger,
   ExtensionStatusRecord,
+  FeedbackRecord,
   HistoryFilter,
   HistoryPage,
   ProviderUsageRecord,
@@ -29,6 +30,8 @@ interface Collections {
   sessions: Record<string, StoredSession | undefined>;
   appConfig: StoredAppConfig | undefined;
   credits: Record<string, CreditLedger | undefined>;
+  /** Newest first. Not user-scoped. */
+  feedback: FeedbackRecord[];
 }
 
 type CollectionName = keyof Collections;
@@ -45,6 +48,7 @@ const COLLECTION_NAMES: readonly CollectionName[] = [
   'sessions',
   'appConfig',
   'credits',
+  'feedback',
 ];
 
 /** Collections keyed by userId. deleteUser removes the user's entry from each of these. */
@@ -72,9 +76,13 @@ const FILE_NAMES: Record<CollectionName, string> = {
   sessions: 'sessions',
   appConfig: 'app-config',
   credits: 'credits',
+  feedback: 'feedback',
 };
 
 const RENAME_RETRIES = 5;
+
+/** Feedback entries kept in feedback.json (newest first). */
+const FEEDBACK_KEPT = 2000;
 
 function emptyCollections(): Collections {
   return {
@@ -89,6 +97,7 @@ function emptyCollections(): Collections {
     sessions: {},
     appConfig: undefined,
     credits: {},
+    feedback: [],
   };
 }
 
@@ -188,7 +197,7 @@ export class FileStorage implements Storage {
       try {
         const parsed: unknown = JSON.parse(text);
         // Older users.json records lack the account fields; normalise them so reads never see undefined.
-        const value = name === 'users' ? normalizeUserRecords(parsed) : parsed;
+        const value = name === 'users' ? normalizeUserRecords(parsed) : name === 'feedback' && !Array.isArray(parsed) ? [] : parsed;
         setCollection(this.data, name, value as Collections[typeof name]);
       } catch {
         throw new Error(`${this.pathFor(name)} is not valid JSON. Move it aside to start with empty data.`);
@@ -435,6 +444,16 @@ export class FileStorage implements Storage {
   async saveAppConfig(config: StoredAppConfig): Promise<void> {
     this.data.appConfig = { ...config, providerDailyQuotas: { ...config.providerDailyQuotas } };
     await this.persist('appConfig');
+  }
+
+  async insertFeedback(item: FeedbackRecord): Promise<void> {
+    // Bounded so the file cannot grow forever; the newest entries are the ones worth reading.
+    this.data.feedback = [{ ...item }, ...this.data.feedback].slice(0, FEEDBACK_KEPT);
+    await this.persist('feedback');
+  }
+
+  async listFeedback(limit: number): Promise<FeedbackRecord[]> {
+    return this.data.feedback.slice(0, limit).map((item) => ({ ...item }));
   }
 
   async getCredits(userId: string): Promise<CreditLedger | undefined> {

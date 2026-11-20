@@ -2,6 +2,8 @@ import { z } from 'zod';
 import {
   ACTIVITY_TYPES,
   EMAIL_MAX_LENGTH,
+  FEEDBACK_CATEGORIES,
+  FEEDBACK_MESSAGE_MAX_LENGTH,
   NAME_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -21,6 +23,9 @@ import {
   TOOLBAR_ACTIONS,
   TRANSLATION_PROVIDER_IDS,
   TRANSLATION_TONES,
+  WRITE_IMAGE_MAX_BASE64_LENGTH,
+  WRITE_IMAGE_MAX_COUNT,
+  WRITE_IMAGE_MIME_TYPES,
   WRITE_PROMPT_MAX_LENGTH,
   getLanguage,
   isSupportedLanguage,
@@ -109,10 +114,25 @@ export const smartReplySchema = z.object({
   count: z.number().int().min(1).max(3).optional(),
 });
 
-export const writeSchema = z.object({
-  prompt: textInput(WRITE_PROMPT_MAX_LENGTH),
-  targetLang: targetLanguage.optional(),
+const writeImage = z.object({
+  mimeType: z.enum(WRITE_IMAGE_MIME_TYPES),
+  data: z
+    .string()
+    .min(1)
+    .max(WRITE_IMAGE_MAX_BASE64_LENGTH, 'That picture is too large.')
+    .regex(/^[A-Za-z0-9+/]+={0,2}$/, 'Invalid image data.'),
 });
+
+export const writeSchema = z
+  .object({
+    prompt: z.string().trim().max(WRITE_PROMPT_MAX_LENGTH, `Text must be ${WRITE_PROMPT_MAX_LENGTH} characters or fewer.`).default(''),
+    images: z.array(writeImage).max(WRITE_IMAGE_MAX_COUNT, `Up to ${WRITE_IMAGE_MAX_COUNT} pictures.`).optional(),
+    targetLang: targetLanguage.optional(),
+  })
+  .refine((value) => value.prompt.length > 0 || (value.images?.length ?? 0) > 0, {
+    message: 'Type a question or add a picture.',
+    path: ['prompt'],
+  });
 
 export const translateVariantsSchema = z.object({
   text: textInput(),
@@ -309,3 +329,12 @@ export const adminConfigUpdateSchema = z.object({
 
 export type SettingsPatch = z.infer<typeof settingsUpdateSchema>;
 export type ProviderPatch = z.infer<typeof providerUpdateSchema>;
+
+export const feedbackSchema = z.object({
+  message: z
+    .string()
+    .trim()
+    .min(3, 'Please write a few words.')
+    .max(FEEDBACK_MESSAGE_MAX_LENGTH, `Feedback must be ${FEEDBACK_MESSAGE_MAX_LENGTH} characters or fewer.`),
+  category: z.enum(FEEDBACK_CATEGORIES).optional(),
+});

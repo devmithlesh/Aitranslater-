@@ -6,6 +6,7 @@ import {
   buildExplainPrompt,
   buildGrammarPrompt,
   buildReplyVariantsPrompt,
+  describeLanguage,
   buildRewritePrompt,
   buildSmartReplyPrompt,
   buildSummarizePrompt,
@@ -15,7 +16,8 @@ import {
   variantsTokenBudget,
 } from './prompts';
 import type { Prompt } from './prompts';
-import { AUTO_LANGUAGE, DEFAULT_EXPLAIN_LANGUAGE, DEFAULT_VARIANT_STYLES, languageName } from '@verba/shared';
+import type { GenerateImage } from '../providers/types';
+import { AUTO_LANGUAGE, DEFAULT_EXPLAIN_LANGUAGE, DEFAULT_VARIANT_STYLES } from '@verba/shared';
 import type { RewriteStyle } from '@verba/shared';
 import type {
   AssistantRunRequest,
@@ -138,7 +140,7 @@ export class AiService {
   async grammar(args: { userId: string; client: ClientKind; request: GrammarRequest; signal: AbortSignal }): Promise<GrammarResponse> {
     const { userId, client, request, signal } = args;
     const settings = await this.settings.get(userId);
-    const hint = request.language && request.language !== AUTO_LANGUAGE ? languageName(request.language) : undefined;
+    const hint = request.language && request.language !== AUTO_LANGUAGE ? describeLanguage(request.language) : undefined;
     const prompt = buildGrammarPrompt(request.text, hint);
     const result = await this.registry.runLlm(
       userId,
@@ -212,14 +214,21 @@ export class AiService {
     const settings = await this.settings.get(userId);
     // Write defaults to English; the popup can pick another language.
     const targetLang = request.targetLang ?? 'en';
-    const prompt = buildWritePrompt({ prompt: request.prompt, targetLanguageName: languageName(targetLang) });
+    const images = request.images ?? [];
+    const prompt = buildWritePrompt({
+      prompt: request.prompt,
+      targetLanguageName: describeLanguage(targetLang),
+      hasImages: images.length > 0,
+    });
+    // A picture needs room for the answer even when no text was typed.
+    const budgetInput = request.prompt.length > 0 ? request.prompt : 'x'.repeat(400);
     // Like translateVariants: users have no AI keys of their own, so the admin's provider chain serves the call.
-    const result = await this.generateText(LOCAL_USER_ID, prompt, request.prompt, 0.6, signal);
+    const result = await this.generateText(LOCAL_USER_ID, prompt, budgetInput, 0.6, signal, images);
     const historyId = await this.history.record({
       userId,
       client,
       type: 'assistant',
-      input: request.prompt,
+      input: request.prompt || '[picture]',
       output: result.value,
       meta: { provider: result.provider, model: result.model, targetLang, assistantName: 'Write' },
       languages: [targetLang],
@@ -294,7 +303,7 @@ export class AiService {
     const prompt = buildReplyVariantsPrompt({
       message: request.message,
       intent: request.intent,
-      targetLanguageName: languageName(targetLang),
+      targetLanguageName: describeLanguage(targetLang),
       styles,
     });
     // Users have no AI keys of their own: the admin's provider chain serves the call.
@@ -503,12 +512,14 @@ export class AiService {
     input: string,
     temperature: number,
     signal: AbortSignal,
+    images?: GenerateImage[],
   ): Promise<ChainResult<string>> {
     return this.registry.runLlm(
       userId,
       {
         system: prompt.system,
         prompt: prompt.prompt,
+        images: images?.length ? images : undefined,
         temperature,
         maxTokens: outputTokenBudget(input.length),
         signal,

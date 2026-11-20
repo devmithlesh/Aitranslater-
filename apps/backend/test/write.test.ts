@@ -57,6 +57,39 @@ describe('POST /api/write', () => {
     expect(me.body.credits).toMatchObject({ used: 1 });
   });
 
+
+  it('sends a screenshot to the model and answers it (no text needed)', async () => {
+    const fetchMock = geminiLetter();
+    const png = Buffer.from('fake-image-bytes').toString('base64');
+
+    const res = await request(h.app)
+      .post('/api/write')
+      .set(AUTH)
+      .send({ prompt: '', images: [{ mimeType: 'image/png', data: png }] });
+
+    expect(res.status).toBe(200);
+    expect(res.body.result).toBe(LETTER);
+    const sent = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
+    expect(sent.contents[0].parts[1].inlineData).toEqual({ mimeType: 'image/png', data: png });
+  });
+
+  it('rejects a request with neither text nor a picture, and bad image data', async () => {
+    expect((await request(h.app).post('/api/write').set(AUTH).send({ prompt: '' })).status).toBe(400);
+    const badType = await request(h.app).post('/api/write').set(AUTH).send({ prompt: 'x', images: [{ mimeType: 'image/svg+xml', data: 'AAAA' }] });
+    expect(badType.status).toBe(400);
+    const badData = await request(h.app).post('/api/write').set(AUTH).send({ prompt: 'x', images: [{ mimeType: 'image/png', data: 'not base64!!' }] });
+    expect(badData.status).toBe(400);
+  });
+
+  it('accepts a body bigger than 64 KB on /api/write only', async () => {
+    geminiLetter();
+    const big = 'A'.repeat(200_000);
+    const ok = await request(h.app).post('/api/write').set(AUTH).send({ prompt: 'what is this', images: [{ mimeType: 'image/png', data: big }] });
+    expect(ok.status).toBe(200);
+    const other = await request(h.app).post('/api/translate-variants').set(AUTH).send({ text: 'x'.repeat(100_000), sourceLang: 'en', targetLang: 'hi' });
+    expect(other.status).toBe(413);
+  });
+
   it('rejects an empty prompt with 400 and does not spend a credit', async () => {
     const res = await request(h.app).post('/api/write').set(AUTH).send({ prompt: '   ' });
     expect(res.status).toBe(400);

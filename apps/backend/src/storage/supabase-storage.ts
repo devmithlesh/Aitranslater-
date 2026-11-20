@@ -1,13 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient, SupabaseClientOptions } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ACTIVITY_TYPES, type CustomAssistant, type HistoryItem, type UserSettings } from '@verba/shared';
+import { ACTIVITY_TYPES, FEEDBACK_CATEGORIES, type CustomAssistant, type HistoryItem, type UserSettings } from '@verba/shared';
 import { LOCAL_USER_ID } from '../middleware/auth';
 import { pruneCreditDays } from './file-storage';
 import type {
   ActivityAggregates,
   CreditLedger,
   ExtensionStatusRecord,
+  FeedbackRecord,
   HistoryFilter,
   HistoryPage,
   ProviderUsageRecord,
@@ -108,6 +109,16 @@ const appConfigRowSchema = z.object({
   default_daily_limit: z.number().nullable(),
   provider_daily_quotas: z.record(z.number()),
   signups_enabled: z.boolean(),
+});
+
+const feedbackRowSchema = z.object({
+  id: z.string(),
+  user_id: z.string(),
+  category: z.enum(FEEDBACK_CATEGORIES),
+  message: z.string(),
+  client: z.enum(['web', 'extension']),
+  version: z.string().nullable(),
+  created_at: z.string(),
 });
 
 const creditRowSchema = z.object({
@@ -531,6 +542,37 @@ export class SupabaseStorage implements Storage {
       signups_enabled: config.signupsEnabled ?? true,
     });
     assertNoError(error, 'saveAppConfig');
+  }
+
+  async insertFeedback(item: FeedbackRecord): Promise<void> {
+    const { error } = await this.client.from('feedback').insert({
+      id: item.id,
+      user_id: item.userId,
+      category: item.category,
+      message: item.message,
+      client: item.client,
+      version: item.version,
+      created_at: item.createdAt,
+    });
+    assertNoError(error, 'insertFeedback');
+  }
+
+  async listFeedback(limit: number): Promise<FeedbackRecord[]> {
+    const { data, error } = await this.client
+      .from('feedback')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    assertNoError(error, 'listFeedback');
+    return (data ?? []).map((row) => feedbackRowSchema.parse(row)).map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      category: row.category,
+      message: row.message,
+      client: row.client,
+      version: row.version,
+      createdAt: new Date(row.created_at).toISOString(),
+    }));
   }
 
   async getCredits(userId: string): Promise<CreditLedger | undefined> {

@@ -6,7 +6,7 @@ import {
   type TranslateVariantsResponse,
   type UserSettings,
 } from '@verba/shared';
-import { CornerDownLeft, ExternalLink, KeyRound, Languages } from 'lucide-react';
+import { ArrowLeftRight, CornerDownLeft, Eraser, ExternalLink, KeyRound, Languages } from 'lucide-react';
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { localError } from '../../components/errors';
 import { LanguageSelect } from '../../components/LanguageSelect';
@@ -17,11 +17,13 @@ import { CopyButton } from '../../components/ui/CopyButton';
 import { ErrorMessage } from '../../components/ui/ErrorMessage';
 import { fieldClass } from '../../components/ui/fieldClass';
 import { cn } from '../../components/ui/cn';
-import { Skeleton, Spinner } from '../../components/ui/Spinner';
+import { Skeleton } from '../../components/ui/Spinner';
 import { isString } from '../../hooks/guards';
 import { useStoredValue } from '../../hooks/useStoredValue';
 import { callApi, type ExtensionError } from '../../shared/messages';
-import { insertIntoField, readFocusedField, type FocusedField } from './pageBridgeClient';
+import { MicButton, SpeechNotice } from '../shared/MicButton';
+import { useSpeechInput } from '../shared/speech';
+import { insertIntoField, readFocusedField, readPageSelection, type FocusedField } from './pageBridgeClient';
 import { CreditLimitNotice, CreditsLine, readResetsAt } from './CreditsLine';
 import { useCredits } from './useCredits';
 import { VariantTabs } from './VariantTabs';
@@ -30,9 +32,19 @@ import { VariantTabs } from './VariantTabs';
 const TARGET_STORAGE_KEY = 'verba.popup.target';
 const VARIANT_STORAGE_KEY = 'verba.popup.variant';
 const DEFAULT_TARGET = 'en';
+const DEFAULT_SOURCE = 'hi';
 const NO_FAVORITES: readonly string[] = [];
 
+/** Same words ignoring spacing and case, so a selection matches the box it was highlighted in. */
+function sameText(a: string, b: string): boolean {
+  const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+  const x = norm(a);
+  return x.length > 0 && x === norm(b);
+}
+
 interface Translation {
+  /** The source language the request used ("auto" when it was detected). */
+  sourceLang: string;
   /** The target language the request used. Results are labelled with this, not with the current select value. */
   targetLang: string;
   data: TranslateVariantsResponse;
@@ -46,10 +58,12 @@ type View =
 
 export interface TranslatorViewProps {
   settings: UserSettings | null;
+  /** False while another tab is showing: the microphone must not keep typing into a box nobody can see. */
+  active?: boolean;
 }
 
 /** Prefilled from the focused text box on the page, translates it into several tones, and inserts the chosen one back. */
-export function TranslatorView({ settings }: TranslatorViewProps) {
+export function TranslatorView({ settings, active = true }: TranslatorViewProps) {
   const favorites = settings?.favoriteLanguages ?? NO_FAVORITES;
   const uid = useId();
 
@@ -57,6 +71,11 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
   /** undefined while reading the page, null when there is no text box, otherwise the focused field. */
   const [field, setField] = useState<FocusedField | null | undefined>(undefined);
   const [target, setTarget, targetLoaded] = useStoredValue<string>(TARGET_STORAGE_KEY, DEFAULT_TARGET, isString);
+  // Not remembered between opens: a leftover "Hinglish" would mistranslate plain English. Starts as Hindi → English.
+  const [source, setSource] = useState<string>(DEFAULT_SOURCE);
+  /** What the last successful translation used ("text|from|to"). Translate stays off until one of them changes. */
+  const [ranKey, setRanKey] = useState('');
+  const speech = useSpeechInput(source === AUTO_LANGUAGE ? 'en' : source, setText);
   const [selectedStyle, setSelectedStyle] = useStoredValue<string>(VARIANT_STORAGE_KEY, '', isString);
   const [view, setView] = useState<View>({ kind: 'idle' });
   const [inserting, setInserting] = useState(false);
@@ -70,16 +89,18 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
 
   const trimmed = text.trim();
   const tooLong = text.length > MAX_INPUT_CHARS;
-  const canTranslate = trimmed.length > 0 && !tooLong && view.kind !== 'loading';
+  const currentKey = `${trimmed}|${source}|${target}`;
+  // The same text with the same languages would give the same result and spend another credit.
+  const canTranslate = trimmed.length > 0 && !tooLong && view.kind !== 'loading' && !(view.kind === 'done' && currentKey === ranKey);
 
   const run = useCallback(
-    async (sourceText: string, lang: string) => {
+    async (sourceText: string, from: string, lang: string) => {
       const seq = ++requestSeq.current;
       setView({ kind: 'loading' });
       setInsertError(null);
       const res = await callApi<TranslateVariantsResponse>('POST', '/translate-variants', {
         text: sourceText,
-        sourceLang: AUTO_LANGUAGE,
+        sourceLang: from,
         targetLang: lang,
       });
       if (!res.ok && res.error.code === 'CREDIT_LIMIT_REACHED') {
@@ -99,19 +120,27 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
         setView({ kind: 'error', error: localError('No translations came back. Try again.') });
         return;
       }
-      setView({ kind: 'done', translation: { targetLang: lang, data: res.data } });
+      setRanKey(`${sourceText}|${from}|${lang}`);
+      setView({ kind: 'done', translation: { sourceLang: from, targetLang: lang, data: res.data } });
     },
     [refreshCredits],
   );
 
+  const stopSpeech = speech.abort;
+  useEffect(() => {
+    if (!active) stopSpeech();
+  }, [active, stopSpeech]);
+
   // Read the focused text box once on open.
   useEffect(() => {
     let alive = true;
-    void readFocusedField().then((found) => {
+    void Promise.all([readFocusedField(), readPageSelection()]).then(([found, selected]) => {
       if (!alive) return;
-      setField(found);
+      // The "You selected" card already shows highlighted text, so do not copy it into this box as well.
+      const dup = found && selected && sameText(found.info.text, selected.info.text);
+      setField(found && dup ? { ...found, info: { ...found.info, text: '' } } : found);
       // A box Verba picked itself (the user never clicked it) is only an insert target: never prefill from it.
-      if (found && !found.info.guessed) setText((prev) => (prev === '' ? found.info.text : prev));
+      if (found && !found.info.guessed && !dup) setText((prev) => (prev === '' ? found.info.text : prev));
     });
     return () => {
       alive = false;
@@ -123,13 +152,33 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
     if (autoRan.current || requestSeq.current > 0 || field === undefined || !targetLoaded) return;
     autoRan.current = true;
     if (field && !field.info.guessed && field.info.text.trim()) {
-      void run(field.info.text.trim(), target);
+      void run(field.info.text.trim(), source, target);
     }
-  }, [field, targetLoaded, target, run]);
+  }, [field, targetLoaded, target, source, run]);
 
   function translate() {
     if (!canTranslate) return;
-    void run(trimmed, target);
+    speech.abort();
+    void run(trimmed, source, target);
+  }
+
+  const detected = view.kind === 'done' ? view.translation.data.detectedSourceLang : undefined;
+  /** Swapping needs a known "from" language: the chosen one, or the one Verba detected. */
+  const swapFrom = source === AUTO_LANGUAGE ? detected : source;
+  /** Starts fresh: empties the box, drops the result and ignores any request still in flight. */
+  function clearAll() {
+    speech.abort();
+    requestSeq.current++;
+    setText('');
+    setView({ kind: 'idle' });
+    setRanKey('');
+    setInsertError(null);
+  }
+
+  function swapLanguages() {
+    if (!swapFrom) return;
+    setSource(target);
+    setTarget(swapFrom);
   }
 
   async function openProviders() {
@@ -162,36 +211,60 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
   const variants = activeTranslation?.data.variants ?? [];
   const activeVariant = variants.find((v) => v.style === selectedStyle) ?? variants[0] ?? null;
 
-  let hint: ReactNode;
-  if (field === undefined) {
-    hint = (
-      <p className="flex items-center gap-1.5 text-[11.5px] text-muted">
-        <Spinner size={12} />
-        Reading the text box…
-      </p>
-    );
-  } else if (field && !field.info.guessed && field.info.text.trim()) {
-    hint = <p className="truncate text-[11.5px] text-muted">From the box on {field.info.site}</p>;
-  } else {
-    hint = (
-      <p className="text-[11.5px] text-muted">Type here, or click into a text box on the page first and reopen Verba.</p>
-    );
-  }
+  // Only worth a line when the text came from the page. No generic tips: the box and the footer already say it.
+  const hint: ReactNode =
+    field && !field.info.guessed && field.info.text.trim() ? (
+      <p className="truncate text-[11.5px] text-muted">From the box on {field.info.site}</p>
+    ) : null;
 
   return (
     <div className="min-w-0 space-y-3">
-      <div className="flex min-h-4 min-w-0 items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">{hint}</div>
-        <CreditsLine credits={credits} />
-      </div>
+      {(hint || (credits && credits.limit !== null)) && (
+        <div className="flex min-w-0 items-start justify-between gap-2">
+          <div className="min-w-0 flex-1">{hint}</div>
+          <CreditsLine credits={credits} />
+        </div>
+      )}
 
-      <LanguageSelect
-        label="Translate to"
-        value={target}
-        onChange={setTarget}
-        favorites={favorites}
-        className="w-full"
-      />
+      <div className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-end gap-2">
+        <div className="min-w-0 space-y-1">
+          <label htmlFor={`${uid}-from`} className="block text-[11px] font-semibold uppercase tracking-wide text-subtle">
+            From
+          </label>
+          <LanguageSelect
+            id={`${uid}-from`}
+            label="Translate from"
+            value={source}
+            onChange={setSource}
+            includeAuto
+            favorites={favorites}
+            className="h-8 w-full text-[12px]"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={swapLanguages}
+          disabled={!swapFrom}
+          aria-label="Swap languages"
+          title={swapFrom ? 'Swap languages' : 'Translate once so Verba knows the source language'}
+          className="mb-0.5 inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted transition-colors hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:pointer-events-none disabled:opacity-40"
+        >
+          <ArrowLeftRight size={15} aria-hidden />
+        </button>
+        <div className="min-w-0 space-y-1">
+          <label htmlFor={`${uid}-to`} className="block text-[11px] font-semibold uppercase tracking-wide text-subtle">
+            To
+          </label>
+          <LanguageSelect
+            id={`${uid}-to`}
+            label="Translate to"
+            value={target}
+            onChange={setTarget}
+            favorites={favorites}
+            className="h-8 w-full text-[12px]"
+          />
+        </div>
+      </div>
 
       <div>
         <textarea
@@ -208,9 +281,18 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
           }}
           className={cn(fieldClass, 'resize-none leading-5', tooLong && 'border-danger/60')}
         />
-        {text.length > 0 && (
-          <div className={cn('mt-1 text-right text-[10.5px] tabular-nums', tooLong ? 'text-danger' : 'text-subtle')}>
-            {text.length.toLocaleString()} / {MAX_INPUT_CHARS.toLocaleString()}
+        {(text.length > 0 || view.kind !== 'idle') && (
+          <div className="mt-1 flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={clearAll}
+              className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11.5px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            >
+              <Eraser size={12} aria-hidden /> Clear
+            </button>
+            <span className={cn('text-[10.5px] tabular-nums', tooLong ? 'text-danger' : 'text-subtle')}>
+              {text.length.toLocaleString()} / {MAX_INPUT_CHARS.toLocaleString()}
+            </span>
           </div>
         )}
       </div>
@@ -225,10 +307,14 @@ export function TranslatorView({ settings }: TranslatorViewProps) {
           <Kbd>Ctrl</Kbd>
           <Kbd>Enter</Kbd>
         </span>
-        <Button icon={Languages} loading={view.kind === 'loading'} disabled={!canTranslate} onClick={translate}>
-          Translate
-        </Button>
+        <div className="flex items-center gap-2">
+          <MicButton speech={speech} getBase={() => text} disabled={view.kind === 'loading'} />
+          <Button icon={Languages} loading={view.kind === 'loading'} disabled={!canTranslate} onClick={translate}>
+            Translate
+          </Button>
+        </div>
       </div>
+      <SpeechNotice speech={speech} />
 
       <div aria-live="polite" className="min-w-0 space-y-3">
         {view.kind === 'loading' && (

@@ -8,6 +8,7 @@ import { RouteError } from '@/pages/RouteError';
 import LoginPage from '@/pages/LoginPage';
 import SignupPage from '@/pages/SignupPage';
 import PrivacyPage from '@/pages/PrivacyPage';
+import LandingPage from '@/pages/LandingPage';
 import { RequireAdmin } from '@/features/admin/RequireAdmin';
 import { readFromState } from '@/features/auth/redirect';
 
@@ -60,6 +61,19 @@ function GuestOnly({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** The home page: a public, indexable landing page for signed-out visitors, the app for signed-in users. */
+function HomeGate() {
+  const { token, unauthorized } = useAppSelector((s) => s.connection);
+  const location = useLocation();
+  const signedIn = !!token && !unauthorized;
+  if (!signedIn && location.pathname === '/') return <LandingPage />;
+  return (
+    <RequireConnection>
+      <SimpleLayout />
+    </RequireConnection>
+  );
+}
+
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -84,11 +98,7 @@ export const router = createBrowserRouter([
   { path: '/privacy', element: <PrivacyPage />, errorElement: <RouteError /> },
   {
     path: '/',
-    element: (
-      <RequireConnection>
-        <SimpleLayout />
-      </RequireConnection>
-    ),
+    element: <HomeGate />,
     errorElement: <RouteError />,
     children: [
       { index: true, element: <VariantTranslatorPage /> },

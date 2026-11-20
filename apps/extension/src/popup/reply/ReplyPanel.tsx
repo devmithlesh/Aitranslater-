@@ -42,10 +42,12 @@ export interface ReplyPanelProps {
   /** The received message (the text selected on the page). */
   message: string;
   settings: UserSettings | null;
+  /** Replies are only put into the page while the panel is showing. */
+  open?: boolean;
 }
 
 /** Drafts replies to a received message in several tones, and inserts the chosen one into the page's text box. */
-export function ReplyPanel({ message, settings }: ReplyPanelProps) {
+export function ReplyPanel({ message, settings, open = true }: ReplyPanelProps) {
   const favorites = settings?.favoriteLanguages ?? NO_FAVORITES;
   const uid = useId();
   const intentId = `${uid}-intent`;
@@ -56,7 +58,14 @@ export function ReplyPanel({ message, settings }: ReplyPanelProps) {
   const [selectedStyle, setSelectedStyle] = useState('');
   const [view, setView] = useState<View>({ kind: 'idle' });
   const [dashboardFailed, setDashboardFailed] = useState(false);
-  const { field, inserting, insertError, insert, clearInsertError } = useFieldInsert();
+  const { field, inserting, insertError, insert, insertQuietly, clearInsertError } = useFieldInsert();
+  /** What the last successful request used ("intent|language"). "New replies" stays off until this changes. */
+  const [ranKey, setRanKey] = useState('');
+  /** The reply Verba last tried to put in the page's box, so the same one is not inserted twice. */
+  const lastAuto = useRef<string | null>(null);
+  /** True once Verba itself put a reply in the box, so a later tone may replace it. */
+  const ownsBox = useRef(false);
+  const [autoAdded, setAutoAdded] = useState(false);
   const { credits, refresh: refreshCredits } = useCredits();
 
   /** Long selections: only the most recent part is sent. */
@@ -68,7 +77,9 @@ export function ReplyPanel({ message, settings }: ReplyPanelProps) {
   const autoRan = useRef(false);
 
   const trimmedIntent = intent.trim();
-  const canRegenerate = view.kind !== 'loading' && sent.length > 0;
+  const currentKey = `${trimmedIntent}|${lang}`;
+  // Asking again with the same words and language would only spend another credit for the same replies.
+  const canRegenerate = view.kind !== 'loading' && sent.length > 0 && !(view.kind === 'done' && currentKey === ranKey);
 
   const run = useCallback(
     async (intentText: string | undefined, targetLang: string) => {
@@ -95,6 +106,7 @@ export function ReplyPanel({ message, settings }: ReplyPanelProps) {
         setView({ kind: 'error', error: localError('No replies came back. Try again.') });
         return;
       }
+      setRanKey(`${intentText ?? ''}|${targetLang}`);
       setView({ kind: 'done', replies: { targetLang, data: res.data } });
     },
     [sent, refreshCredits, clearInsertError],
@@ -125,6 +137,22 @@ export function ReplyPanel({ message, settings }: ReplyPanelProps) {
   const replies = view.kind === 'done' ? view.replies : null;
   const variants = replies?.data.variants ?? [];
   const activeVariant = variants.find((v) => v.style === selectedStyle) ?? variants[0] ?? null;
+  const activeText = activeVariant?.text ?? null;
+
+  // The reply goes straight into the page's message box. The Insert button stays for when the user wants to
+  // close Verba too. Picking another tone swaps the text. A box the user already typed in is never overwritten.
+  useEffect(() => {
+    if (!open || view.kind !== 'done' || !field || activeText === null) return;
+    if (lastAuto.current === activeText) return;
+    if (!ownsBox.current && field.info.text.trim() !== '') return;
+    lastAuto.current = activeText;
+    void insertQuietly(activeText).then((ok) => {
+      if (ok) {
+        ownsBox.current = true;
+        setAutoAdded(true);
+      }
+    });
+  }, [open, view.kind, field, activeText, insertQuietly]);
 
   return (
     <div className="min-w-0 space-y-2.5">
@@ -183,8 +211,12 @@ export function ReplyPanel({ message, settings }: ReplyPanelProps) {
               lang={replies.targetLang}
             />
 
+            {autoAdded && (
+              <p className="text-[11.5px] text-success">Added to the message box. Pick another tone to swap it.</p>
+            )}
+
             <div className="flex flex-wrap items-center justify-end gap-2">
-              {/* One click puts the reply in the page's message box. Copy only when there is no box to write into. */}
+              {/* The reply is already in the box; this inserts it again and closes Verba. Copy only when there is no box. */}
               {field ? (
                 <Button
                   fullWidth
@@ -193,7 +225,7 @@ export function ReplyPanel({ message, settings }: ReplyPanelProps) {
                   disabled={inserting}
                   onClick={() => void insert(activeVariant.text)}
                 >
-                  Insert in chat box
+                  Insert and close
                 </Button>
               ) : (
                 <CopyButton text={activeVariant.text} />

@@ -4,6 +4,7 @@ import { AdminService } from './admin.service';
 import { AuthService } from './auth.service';
 import { AiService } from './ai.service';
 import { CreditsService } from './credits.service';
+import { FeedbackService } from './feedback.service';
 import { HistoryService } from './history.service';
 import { ProviderRegistry } from './provider-registry';
 import { SettingsService } from './settings.service';
@@ -24,6 +25,7 @@ export interface Services {
   users: UsersService;
   admin: AdminService;
   auth: AuthService;
+  feedback: FeedbackService;
 }
 
 /**
@@ -47,5 +49,6 @@ export function createServices(
   const users = new UsersService(storage, credits, now);
   const admin = new AdminService(storage, registry, usage, now);
   const auth = new AuthService(config, storage, credits, now);
-  return { settings, usage, history, registry, translation, ai, stats, credits, users, admin, auth };
+  const feedback = new FeedbackService(storage, now);
+  return { settings, usage, history, registry, translation, ai, stats, credits, users, admin, auth, feedback };
 }

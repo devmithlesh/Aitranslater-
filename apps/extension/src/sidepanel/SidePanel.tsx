@@ -37,7 +37,7 @@ const QUICK_OPTIONS: readonly SegmentOption<ExplainLanguage>[] = EXPLAIN_QUICK_L
 /** Hinglish first, then every supported language with its native name. */
 const ALL_LANGUAGE_OPTIONS: readonly { code: ExplainLanguage; label: string }[] = [
   { code: HINGLISH, label: 'Hinglish' },
-  ...LANGUAGES.map((l) => ({ code: l.code, label: `${l.nativeName} (${l.name})` })),
+  ...LANGUAGES.filter((l) => l.code !== HINGLISH).map((l) => ({ code: l.code, label: `${l.nativeName} (${l.name})` })),
 ];
 
 function loadingText(language: ExplainLanguage): string {

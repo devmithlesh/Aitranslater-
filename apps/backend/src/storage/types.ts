@@ -1,4 +1,4 @@
-import type { ActivityType, ClientKind, CustomAssistant, HistoryItem, UserSettings } from '@verba/shared';
+import type { ActivityType, ClientKind, CustomAssistant, FeedbackCategory, HistoryItem, UserSettings } from '@verba/shared';
 
 export interface StoredProviderConfig {
   enabled: boolean;
@@ -84,6 +84,18 @@ export interface ActivityAggregates {
   charsProcessed: number;
 }
 
+/** Product feedback sent from the extension. Kept after the account is deleted (it is not user data). */
+export interface FeedbackRecord {
+  id: string;
+  userId: string;
+  category: FeedbackCategory;
+  message: string;
+  client: ClientKind;
+  /** Extension version, when sent from the extension. */
+  version: string | null;
+  createdAt: string;
+}
+
 export interface ExtensionStatusRecord {
   lastSeenAt: string;
   version: string;
@@ -162,6 +174,10 @@ export interface Storage {
 
   getAppConfig(): Promise<StoredAppConfig | undefined>;
   saveAppConfig(config: StoredAppConfig): Promise<void>;
+
+  /** Newest first. */
+  insertFeedback(item: FeedbackRecord): Promise<void>;
+  listFeedback(limit: number): Promise<FeedbackRecord[]>;
 
   getCredits(userId: string): Promise<CreditLedger | undefined>;
   saveCredits(userId: string, ledger: CreditLedger): Promise<void>;

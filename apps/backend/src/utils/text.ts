@@ -3,6 +3,8 @@ import { LANGUAGES, getLanguage } from '@verba/shared';
 /** Like normalizeLanguage, but returns undefined unless the result is a known language code. */
 export function normalizeDetectedLanguage(code: string): string | undefined {
   const normalized = normalizeLanguage(code);
+  // Hinglish is Hindi in Latin letters: report the language the text is really in.
+  if (normalized === 'hinglish') return 'hi';
   return getLanguage(normalized) ? normalized : undefined;
 }
 

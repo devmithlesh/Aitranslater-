@@ -1,4 +1,4 @@
-import { AUTO_LANGUAGE } from '@verba/shared';
+import { AUTO_LANGUAGE, HINGLISH } from '@verba/shared';
 import type {
   ClientKind,
   DetectLanguageResponse,
@@ -26,14 +26,16 @@ export interface TranslationOutcome {
 
 /** Picks the providers to try: a styled request is LLM-only; an explicit provider is used alone. */
 function selectCandidates(entries: ProviderEntry[], request: TranslateRequest): ProviderEntry[] {
-  if (request.style) {
+  // Hinglish has no ISO code, so classic translation APIs cannot do it: the AI model handles it.
+  const hinglish = request.sourceLang === HINGLISH || request.targetLang === HINGLISH;
+  if (request.style || hinglish) {
     if (request.provider && request.provider !== 'llm') {
-      throw badRequest('Styled translations always use the AI model ("llm") provider.');
+      throw badRequest('Styled and Hinglish translations always use the AI model ("llm") provider.');
     }
     const llm = entries.find((entry) => entry.id === 'llm');
     if (!llm?.ready) {
       throw notConfigured(
-        'Styled translations need an AI model provider. Add a Gemini/Groq/OpenRouter key or enable Ollama.',
+        'Styled and Hinglish translations need an AI model provider. Add a Gemini/Groq/OpenRouter key or enable Ollama.',
       );
     }
     return [llm];

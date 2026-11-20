@@ -2,9 +2,9 @@ import { normalizeApiUrl } from '@verba/shared';
 import type { BackgroundRequest, HttpMethod } from '../shared/messages';
 
 /**
- * Who sent a runtime message. Extension pages (popup, options) may use any safe path. Content scripts
- * never message the background (the popup reaches them via chrome.scripting), so they get nothing:
- * a compromised page renderer cannot use the access token.
+ * Who sent a runtime message. Extension pages (popup, options) may use any safe path. Content scripts may send exactly
+ * one request, `verba:open-popup` (the in-page button); the popup reads the page through chrome.scripting.
+ * Nothing else is allowed, so a compromised page renderer cannot use the access token.
  */
 export type SenderTrust = 'extension' | 'content' | 'untrusted';
 
@@ -38,6 +38,8 @@ export function classifySender(
 }
 
 export function isRequestAllowed(trust: SenderTrust, request: BackgroundRequest): boolean {
+  // The in-page Verba button may only ask for the popup; every other request needs an extension page.
+  if (trust === 'content') return request.type === 'verba:open-popup';
   if (trust !== 'extension') return false;
   if (request.type === 'verba:api') return isSafePath(request.path);
   if (request.type === 'verba:open-dashboard' && request.path !== undefined) return isSafePath(request.path);

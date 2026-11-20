@@ -423,14 +423,28 @@ export interface ExplainResponse extends ProviderMeta {
 /** Longest instruction accepted by POST /api/write. */
 export const WRITE_PROMPT_MAX_LENGTH = 2000;
 
+/** Pictures (screenshots) that can come with a write request. The extension shrinks them first. */
+export const WRITE_IMAGE_MAX_COUNT = 3;
+/** Longest base64 string per picture (about 2 MB of image). */
+export const WRITE_IMAGE_MAX_BASE64_LENGTH = 2_800_000;
+export const WRITE_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export type WriteImageMimeType = (typeof WRITE_IMAGE_MIME_TYPES)[number];
+export interface WriteImage {
+  mimeType: WriteImageMimeType;
+  /** Base64 of the image bytes, without the "data:...;base64," prefix. */
+  data: string;
+}
+
 /**
  * POST /api/write — writes new content from a request in any language
  * ("write a leave application for 2 days", "reply politely to this…"). Costs 1 daily credit;
  * a failed call gives it back.
  */
 export interface WriteRequest {
-  /** What to write, 1..WRITE_PROMPT_MAX_LENGTH characters after trim. */
+  /** What to write, up to WRITE_PROMPT_MAX_LENGTH characters after trim. May be empty when images are sent. */
   prompt: string;
+  /** Optional pictures the AI should read (up to WRITE_IMAGE_MAX_COUNT). */
+  images?: WriteImage[];
   /** Language of the written content (supported language code). Defaults to English ("en"). */
   targetLang?: string;
 }
@@ -712,6 +726,22 @@ export interface ExtensionStatusResponse {
   online: boolean;
   lastSeenAt: string | null;
   version: string | null;
+}
+
+// ── Feedback ────────────────────────────────────────────────────────
+export const FEEDBACK_CATEGORIES = ['idea', 'bug', 'other'] as const;
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number];
+export const FEEDBACK_MESSAGE_MAX_LENGTH = 2000;
+
+/** POST /api/feedback → 201 FeedbackResponse. Free of credits. */
+export interface FeedbackRequest {
+  /** 3..FEEDBACK_MESSAGE_MAX_LENGTH characters after trim. */
+  message: string;
+  /** Defaults to "idea". */
+  category?: FeedbackCategory;
+}
+export interface FeedbackResponse {
+  id: string;
 }
 
 /**

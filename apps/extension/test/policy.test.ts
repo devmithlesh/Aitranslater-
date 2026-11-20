@@ -12,13 +12,14 @@ import { parseRequest } from '../src/background/router';
 const EXT_ORIGIN = 'chrome-extension://abcdef/';
 
 describe('request policy', () => {
-  it('denies content scripts every request, including API calls and state reads', () => {
+  it('denies content scripts every request except opening the popup', () => {
     const content = 'content' as const;
     expect(isRequestAllowed(content, { type: 'verba:api', method: 'POST', path: '/translate-variants' })).toBe(false);
     expect(isRequestAllowed(content, { type: 'verba:api', method: 'DELETE', path: '/history' })).toBe(false);
     expect(isRequestAllowed(content, { type: 'verba:get-state' })).toBe(false);
     expect(isRequestAllowed(content, { type: 'verba:open-options' })).toBe(false);
     expect(isRequestAllowed(content, { type: 'verba:login', email: 'a@b.co', password: 'x' })).toBe(false);
+    expect(isRequestAllowed(content, { type: 'verba:open-popup' })).toBe(true);
   });
 
   it('checks the dashboard path for extension pages', () => {

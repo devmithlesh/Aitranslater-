@@ -217,7 +217,7 @@ describe('POST /api/translate-variants hardening', () => {
 
   it('drops a detected language the shared list does not know', async () => {
     mockFetch((url) =>
-      url.includes('generativelanguage.googleapis.com') ? variantsReply('Hinglish') : unexpectedUrl(url),
+      url.includes('generativelanguage.googleapis.com') ? variantsReply('Klingon') : unexpectedUrl(url),
     );
     const res = await request(h.app)
       .post('/api/translate-variants')

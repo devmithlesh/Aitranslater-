@@ -110,7 +110,7 @@ describe('translation routing', () => {
       .send({ text: 'Hello', sourceLang: 'en', targetLang: 'es', style: 'funny' });
     expect(res.status).toBe(503);
     expect(res.body.error.code).toBe('NO_PROVIDER_CONFIGURED');
-    expect(res.body.error.message).toContain('Styled translations need an AI model provider');
+    expect(res.body.error.message).toContain('Styled and Hinglish translations need an AI model provider');
   });
 
   it('routes a styled translation through the LLM with the style applied', async () => {

@@ -10,6 +10,8 @@ export interface FieldInsert {
   insertError: string | null;
   /** Replaces the focused field's text, then closes the popup. Falls back to the clipboard on failure. */
   insert: (text: string) => Promise<void>;
+  /** Puts the text in the field but keeps the popup open (used to add a draft automatically). Returns whether it landed. */
+  insertQuietly: (text: string) => Promise<boolean>;
   /** Clears the insert error, e.g. when a new result replaces the old one. */
   clearInsertError: () => void;
 }
@@ -59,5 +61,16 @@ export function useFieldInsert(): FieldInsert {
     [field, inserting],
   );
 
-  return { field, inserting, insertError, insert, clearInsertError };
+  const insertQuietly = useCallback(
+    async (text: string): Promise<boolean> => {
+      if (!field) return false;
+      setInsertError(null);
+      const res = await insertIntoField(field.tabId, field.frameId, text);
+      if (!res.ok) setInsertError(res.reason);
+      return res.ok;
+    },
+    [field],
+  );
+
+  return { field, inserting, insertError, insert, insertQuietly, clearInsertError };
 }
