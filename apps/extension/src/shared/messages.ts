@@ -67,6 +67,8 @@ export type BackgroundRequest =
   | { type: 'verba:get-state' }
   /** Email + password sign-in. Never stores the password; saves only the session token it returns. */
   | { type: 'verba:login'; apiUrl?: string; email: string; password: string; dashboardUrl?: string }
+  /** Google sign-in: opens Google's account chooser, then trades the ID token for a Verba session. */
+  | { type: 'verba:google-login' }
   /** Creates an account with name, email and password, then signs in. Never stores the password. */
   | { type: 'verba:signup'; apiUrl?: string; name: string; email: string; password: string; dashboardUrl?: string }
   /** Ends the server session (best effort) and clears the local connection. */
@@ -82,6 +84,7 @@ export interface BackgroundResponseMap {
   'verba:api': Result<unknown>;
   'verba:get-state': Result<ExtensionState>;
   'verba:login': Result<ExtensionState>;
+  'verba:google-login': Result<ExtensionState>;
   'verba:signup': Result<ExtensionState>;
   'verba:disconnect': Result<ExtensionState>;
   'verba:sync': Result<ExtensionState>;

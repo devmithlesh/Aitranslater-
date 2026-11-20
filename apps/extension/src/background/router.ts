@@ -12,6 +12,7 @@ import {
 import { callBackend } from './backend';
 import {
   disconnectExtension,
+  googleLoginExtension,
   loginExtension,
   openDashboard,
   openOptions,
@@ -70,6 +71,8 @@ export function parseRequest(value: unknown): BackgroundRequest | null {
       return parseLogin(value);
     case 'verba:signup':
       return parseSignup(value);
+    case 'verba:google-login':
+      return { type: 'verba:google-login' };
     case 'verba:disconnect':
       return { type: 'verba:disconnect' };
     case 'verba:sync':
@@ -93,6 +96,8 @@ async function dispatch(request: BackgroundRequest): Promise<unknown> {
       return loginExtension(request);
     case 'verba:signup':
       return signupExtension(request);
+    case 'verba:google-login':
+      return googleLoginExtension();
     case 'verba:disconnect':
       return disconnectExtension();
     case 'verba:sync':

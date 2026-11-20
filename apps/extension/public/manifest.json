@@ -43,7 +43,7 @@
       "match_origin_as_fallback": true
     }
   ],
-  "permissions": ["storage", "alarms", "activeTab", "scripting", "contextMenus", "sidePanel"],
+  "permissions": ["identity", "storage", "alarms", "activeTab", "scripting", "contextMenus", "sidePanel"],
   "host_permissions": [
     "https://aitranslater.onrender.com/*",
     "http://localhost/*",

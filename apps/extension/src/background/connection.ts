@@ -197,6 +197,63 @@ export async function loginExtension(req: LoginInput): Promise<Result<ExtensionS
   return finishSession(apiUrl, login.data, dashboard.data);
 }
 
+/** The nonce Google echoes back inside the ID token, or null when the token is malformed. */
+function readIdTokenNonce(idToken: string): string | null {
+  const payload = idToken.split('.')[1];
+  if (!payload) return null;
+  try {
+    const padded = payload.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(payload.length / 4) * 4, '=');
+    const parsed: unknown = JSON.parse(atob(padded));
+    return isRecord(parsed) && typeof parsed.nonce === 'string' ? parsed.nonce : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * "Continue with Google". Chrome opens Google's account chooser (chrome.identity), Google returns an ID
+ * token for the server's OAuth Web client, and the server trades it for a normal Verba session. The token
+ * is checked here for the nonce we sent, then verified again by the server. Nothing from Google is stored.
+ */
+export async function googleLoginExtension(): Promise<Result<ExtensionState>> {
+  const apiUrl = cleanApiUrl(DEFAULT_API_URL);
+  if (!apiUrl) return fail('INTERNAL', 'Verba server address is not valid.');
+  const dashboard = resolveDashboardUrl(undefined);
+  if (!dashboard.ok) return { ok: false, error: dashboard.error };
+
+  const server = await checkServer(apiUrl);
+  if (!server.ok) return server;
+
+  const config = await fetchBackend({ apiUrl }, 'GET', '/auth/config', undefined, { timeoutMs: LOGIN_TIMEOUT_MS });
+  if (!config.ok) return config;
+  const clientId = isRecord(config.data) && typeof config.data.googleClientId === 'string' ? config.data.googleClientId : '';
+  if (clientId === '') return fail('INTERNAL', 'Google sign-in is not set up on this server yet. Use your email and password.');
+
+  const nonce = crypto.randomUUID();
+  const auth = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  auth.search = new URLSearchParams({
+    client_id: clientId,
+    response_type: 'id_token',
+    redirect_uri: chrome.identity.getRedirectURL(),
+    scope: 'openid email profile',
+    nonce,
+    prompt: 'select_account',
+  }).toString();
+
+  let responseUrl: string | undefined;
+  try {
+    responseUrl = await chrome.identity.launchWebAuthFlow({ url: auth.toString(), interactive: true });
+  } catch {
+    return fail('INTERNAL', 'Google sign-in was cancelled or could not finish. Try again.');
+  }
+  const idToken = responseUrl ? new URLSearchParams(new URL(responseUrl).hash.slice(1)).get('id_token') : null;
+  if (!idToken || readIdTokenNonce(idToken) !== nonce) return fail('INTERNAL', 'Google sign-in failed. Try again.');
+
+  const login = await fetchBackend({ apiUrl }, 'POST', '/auth/google', { idToken }, { timeoutMs: LOGIN_TIMEOUT_MS });
+  if (!login.ok) return login;
+  return finishSession(apiUrl, login.data, dashboard.data);
+}
+
 /**
  * Account sign-up, then sign-in with the returned session. The password is sent once to
  * POST /auth/signup and is never stored or logged. Only the returned session token is saved.
