@@ -39,6 +39,11 @@ export function createAiController(services: Services) {
   }
 
   return {
+    /** Free prompts left for a visitor without an account. */
+    guestCredits: asyncHandler(async (_req, res) => {
+      res.json({ credits: await services.credits.status(getAuth(res)) });
+    }),
+
     translate: asyncHandler(async (req, res) => {
       const request = parseOrThrow(translateSchema, req.body);
       const result = await services.translation.translate({

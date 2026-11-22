@@ -1,8 +1,8 @@
-import type { ExtensionError, Result } from '../shared/messages';
+import { DEFAULT_API_URL, type ExtensionError, type Result } from '../shared/messages';
 import { fail, ok } from '../lib/result';
 import { isApiErrorCode, isRecord } from '../lib/guards';
-import { isLocalHostname, parseHttpUrl } from '../lib/policy';
-import { patchState, readConnection } from '../lib/storage';
+import { cleanApiUrl, isLocalHostname, parseHttpUrl } from '../lib/policy';
+import { patchState, readConnection, readGuestId } from '../lib/storage';
 import type { HttpMethod } from '../shared/messages';
 
 const REQUEST_TIMEOUT_MS = 45_000;
@@ -10,6 +10,8 @@ const REQUEST_TIMEOUT_MS = 45_000;
 export interface BackendTarget {
   apiUrl: string;
   token?: string;
+  /** Install id for a signed-out visitor. Sent instead of a token. */
+  guestId?: string;
 }
 
 export function originOf(apiUrl: string): string {
@@ -83,6 +85,7 @@ export async function fetchBackend(
 ): Promise<Result<unknown>> {
   const headers: Record<string, string> = { 'X-Verba-Client': 'extension', Accept: 'application/json' };
   if (target.token) headers.Authorization = `Bearer ${target.token}`;
+  else if (target.guestId) headers['X-Verba-Guest'] = target.guestId;
   if (body !== undefined) headers['Content-Type'] = 'application/json';
 
   let response: Response;
@@ -112,12 +115,25 @@ export async function fetchBackend(
   return ok(payload);
 }
 
-/** Calls the saved connection. Marks the state when the token is rejected. */
+/** The only calls a signed-out visitor may make. Each prompt uses one of the few free ones per day. */
+const GUEST_CALLS: ReadonlySet<string> = new Set(['POST /translate-variants', 'POST /write', 'POST /reply-variants']);
+
+/** Signed-out use: the free daily prompts. "GET /me" is answered with the visitor's remaining prompts. */
+async function callAsGuest(method: HttpMethod, path: string, body?: unknown): Promise<Result<unknown>> {
+  const wantsCredits = method === 'GET' && path === '/me';
+  if (!wantsCredits && !GUEST_CALLS.has(`${method} ${path}`)) {
+    return fail('NOT_CONNECTED', 'Sign in to Verba to use this.');
+  }
+  const apiUrl = cleanApiUrl(DEFAULT_API_URL);
+  if (!apiUrl) return fail('NOT_CONNECTED', 'Verba server address is not valid.');
+  const guestId = await readGuestId();
+  return fetchBackend({ apiUrl, guestId }, method, wantsCredits ? '/guest/credits' : path, body);
+}
+
+/** Calls the saved connection. Marks the state when the token is rejected. Without a connection: guest mode. */
 export async function callBackend(method: HttpMethod, path: string, body?: unknown): Promise<Result<unknown>> {
   const connection = await readConnection();
-  if (!connection) {
-    return fail('NOT_CONNECTED', 'Connect Verba to your server in the extension settings.');
-  }
+  if (!connection) return callAsGuest(method, path, body);
   const result = await fetchBackend({ apiUrl: connection.apiUrl, token: connection.token }, method, path, body);
   if (!result.ok && result.error.status === 401) {
     await patchState({ lastError: 'Verba rejected the saved token. Reconnect with a new connection code.' });

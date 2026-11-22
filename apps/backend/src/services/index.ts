@@ -45,7 +45,11 @@ export function createServices(
   const translation = new TranslationService(registry, settings, history);
   const ai = new AiService(registry, settings, history, translation, storage, now);
   const stats = new StatsService(storage, usage, history, now);
-  const credits = new CreditsService(storage, now);
+  const credits = new CreditsService(storage, now, {
+    dailyLimit: config.guestDailyLimit,
+    ipDailyLimit: config.guestIpDailyLimit,
+    globalDailyLimit: config.guestGlobalDailyLimit,
+  });
   const users = new UsersService(storage, credits, now);
   const admin = new AdminService(storage, registry, usage, now);
   const auth = new AuthService(config, storage, credits, now);

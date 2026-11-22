@@ -45,6 +45,7 @@ export function AuthPanel({ mode, onModeChange, onSignedIn }: AuthPanelProps) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<ExtensionError | null>(null);
   const [webError, setWebError] = useState<string | null>(null);
+  const [googleBusy, setGoogleBusy] = useState(false);
   const [seenMode, setSeenMode] = useState(mode);
 
   // Switching modes (from the header or the switch line) clears the password and any error.
@@ -64,7 +65,7 @@ export function AuthPanel({ mode, onModeChange, onSignedIn }: AuthPanelProps) {
   const passwordOk = isSignup
     ? password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH
     : password.length > 0 && password.length <= PASSWORD_MAX_LENGTH;
-  const canSubmit = nameOk && emailOk && passwordOk && !busy;
+  const canSubmit = nameOk && emailOk && passwordOk && !busy && !googleBusy;
 
   /** The password is always cleared after an attempt and is never logged or kept in state. */
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -92,15 +93,17 @@ export function AuthPanel({ mode, onModeChange, onSignedIn }: AuthPanelProps) {
     if (!res.ok) setError(res.error);
   }
 
-  /** Opens the website sign-in flow; it links this extension back automatically. */
-  async function continueOnWebsite() {
+  /**
+   * Google opens its own window, which closes this popup. The sign-in finishes in the background:
+   * open Verba again afterwards and it is signed in.
+   */
+  async function continueWithGoogle() {
     setWebError(null);
-    const res = await openDashboard(`/extension/connect?ext=${chrome.runtime.id}`);
-    if (res.ok) {
-      window.close();
-    } else {
-      setWebError(res.error.message);
-    }
+    setGoogleBusy(true);
+    const res = await sendToBackground({ type: 'verba:google-login' });
+    setGoogleBusy(false);
+    if (res.ok) onSignedIn();
+    else setWebError(res.error.message);
   }
 
   return (
@@ -206,12 +209,10 @@ export function AuthPanel({ mode, onModeChange, onSignedIn }: AuthPanelProps) {
       </div>
 
       <div className="space-y-1.5">
-        <Button variant="outline" fullWidth onClick={() => void continueOnWebsite()}>
-          Continue on the Verba website
+        <Button variant="outline" fullWidth loading={googleBusy} disabled={busy} onClick={() => void continueWithGoogle()}>
+          {!googleBusy && <GoogleLogo />}
+          Continue with Google
         </Button>
-        <p className="text-center text-[12px] leading-5 text-muted">
-          Already signed in there? The extension connects automatically.
-        </p>
         {webError && (
           <p role="alert" className="text-center text-[12px] text-danger">
             {webError}
@@ -219,6 +220,18 @@ export function AuthPanel({ mode, onModeChange, onSignedIn }: AuthPanelProps) {
         )}
       </div>
     </div>
+  );
+}
+
+/** The multicolour Google "G", so the button is recognisable. */
+function GoogleLogo() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z" />
+      <path fill="#34A853" d="M12 24c3.2 0 6-1.1 7.9-2.9l-3.9-3c-1.1.7-2.5 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z" />
+      <path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.8V6.5H1.4a12 12 0 0 0 0 10.9l4-3z" />
+      <path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.5l4 3.1C6.3 6.9 8.9 4.8 12 4.8z" />
+    </svg>
   );
 }
 

@@ -25,6 +25,7 @@ import { MicButton, SpeechNotice } from '../shared/MicButton';
 import { imagesFromClipboard, prepareImage, type AttachedImage } from '../shared/imageAttach';
 import { useSpeechInput } from '../shared/speech';
 import { useFieldInsert } from '../shared/useFieldInsert';
+import { WRITE_TEMPLATES, type WriteTemplate } from './templates';
 
 const DEFAULT_LANG = 'en';
 const NO_FAVORITES: readonly string[] = [];
@@ -124,6 +125,18 @@ export function WriteView({ settings, active = true }: WriteViewProps) {
     clearInsertError();
   }
 
+  /** Fills the box with a starter prompt for the user to edit. Does not submit. */
+  function applyTemplate(template: WriteTemplate) {
+    speech.abort();
+    setPrompt(template.prompt);
+    requestAnimationFrame(() => {
+      const box = document.getElementById(promptId) as HTMLTextAreaElement | null;
+      if (!box) return;
+      box.focus();
+      box.setSelectionRange(box.value.length, box.value.length);
+    });
+  }
+
   function submit() {
     if (!canWrite) return;
     speech.abort();
@@ -221,6 +234,24 @@ export function WriteView({ settings, active = true }: WriteViewProps) {
           </div>
         )}
       </div>
+
+      {prompt.trim() === '' && images.length === 0 && view.kind === 'idle' && (
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium text-subtle">Try one of these</p>
+          <div role="group" aria-label="Quick start templates" className="mt-1.5 flex flex-wrap gap-1.5">
+            {WRITE_TEMPLATES.map((template) => (
+              <button
+                key={template.id}
+                type="button"
+                onClick={() => applyTemplate(template)}
+                className="rounded-full border border-border bg-surface px-2.5 py-1 text-[11.5px] font-medium text-muted hover:border-border-strong hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              >
+                {template.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       <LanguageSelect label="Answer in" value={lang} onChange={setLang} favorites={favorites} className="w-full" />
 

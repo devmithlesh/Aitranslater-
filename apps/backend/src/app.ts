@@ -48,7 +48,7 @@ function corsOptions(config: AppConfig): CorsOptions {
   return {
     origin: (origin, callback) => callback(null, isOriginAllowed(origin, config)),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type', CLIENT_HEADER],
+    allowedHeaders: ['Authorization', 'Content-Type', CLIENT_HEADER, 'X-Verba-Guest'],
   };
 }
 
@@ -73,7 +73,7 @@ export function createApp(deps: AppDeps): Express {
   api.use(limiters.general);
   api.use(createHealthRouter(storage.kind));
   api.use(createPublicAuthRouter(services, limiters.auth));
-  api.use(createAuthMiddleware({ adminToken: deps.accessToken, storage, now: deps.now }));
+  api.use(createAuthMiddleware({ adminToken: deps.accessToken, storage, now: deps.now, guestEnabled: config.guestDailyLimit > 0 }));
   api.use(createAuthRouter(services));
   api.use(createAdminRouter(services));
   api.use(createAiRouter(services, limiters.ai));

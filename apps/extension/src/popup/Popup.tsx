@@ -1,4 +1,4 @@
-import { ExternalLink, LogOut, MessageSquarePlus, Settings } from 'lucide-react';
+import { ArrowLeft, ExternalLink, LogIn, LogOut, MessageSquarePlus, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { connectionStatus, StatusDot } from '../components/ConnectionStatus';
 import { localError } from '../components/errors';
@@ -12,6 +12,7 @@ import { sendToBackground, type ExtensionError } from '../shared/messages';
 import { AuthPanel, type AuthMode } from './AuthPanel';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { ExplainSelectionCard } from './ExplainSelectionCard';
+import { GuestProvider } from './shared/guest';
 import { FeedbackPanel } from './feedback/FeedbackPanel';
 import { TranslatorView } from './translator/TranslatorView';
 import { WriteView } from './writer/WriteView';
@@ -23,6 +24,8 @@ export function Popup() {
   const [signingOut, setSigningOut] = useState(false);
   const [tab, setTab] = useState<'translate' | 'write'>('translate');
   const [feedbackOpen, setFeedbackOpen] = useState(false);
+  /** Signed-out visitors use the tools first; this swaps them for the sign-in form. */
+  const [authOpen, setAuthOpen] = useState(false);
   const status = connectionStatus(state);
 
   async function handleOpenDashboard() {
@@ -45,6 +48,13 @@ export function Popup() {
 
   const connected = state?.connected === true;
   const signedOutReady = state !== null && !connected;
+  const guestValue = {
+    isGuest: signedOutReady,
+    openAuth: (mode: AuthMode) => {
+      setAuthMode(mode);
+      setAuthOpen(true);
+    },
+  };
 
   return (
     <div className="flex max-h-[580px] min-h-[240px] min-w-0 flex-col overflow-x-hidden bg-bg text-fg">
@@ -54,13 +64,17 @@ export function Popup() {
         <StatusDot tone={status.tone} label={status.label} className="ml-0.5" />
         <div className="ml-auto flex items-center gap-0.5">
           {signedOutReady && (
-            // One switch: offers the form that is not showing.
+            // Free use comes first: this opens the form, and the same spot takes the visitor back.
             <button
               type="button"
-              onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-              className="mr-1 inline-flex h-6 items-center rounded-md bg-brand-gradient px-2.5 text-[11.5px] font-semibold text-brand-fg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              onClick={() => {
+                setAuthMode('signin');
+                setAuthOpen((open) => !open);
+              }}
+              className="mr-1 inline-flex h-6 items-center gap-1 rounded-md bg-brand-gradient px-2.5 text-[11.5px] font-semibold text-brand-fg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             >
-              {authMode === 'signin' ? 'Sign up' : 'Sign in'}
+              {authOpen ? <ArrowLeft size={12} aria-hidden /> : <LogIn size={12} aria-hidden />}
+              {authOpen ? 'Back' : 'Sign in'}
             </button>
           )}
           {connected && (
@@ -105,14 +119,23 @@ export function Popup() {
           </div>
         )}
 
-        {state && !connected && (
-          <AuthPanel mode={authMode} onModeChange={setAuthMode} onSignedIn={refresh} />
+        {state && !connected && authOpen && (
+          <AuthPanel
+            mode={authMode}
+            onModeChange={setAuthMode}
+            onSignedIn={() => {
+              setAuthOpen(false);
+              refresh();
+            }}
+          />
         )}
 
         {state && connected && feedbackOpen && <FeedbackPanel onBack={() => setFeedbackOpen(false)} />}
 
-        {state && connected && (
-          <div hidden={feedbackOpen} className="min-w-0 space-y-4 p-4">
+        {state && (
+          <GuestProvider value={guestValue}>
+          {/* Hidden, not unmounted, while a visitor signs in: what they typed and the result stay for when they come back. */}
+          <div hidden={feedbackOpen || (!connected && authOpen)} className="min-w-0 space-y-4 p-4">
             <SegmentedControl
               label="Verba mode"
               size="sm"
@@ -133,6 +156,7 @@ export function Popup() {
               <WriteView settings={state.settings} active={tab === 'write' && !feedbackOpen} />
             </div>
           </div>
+          </GuestProvider>
         )}
       </div>
 

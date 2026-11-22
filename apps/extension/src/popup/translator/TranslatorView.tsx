@@ -19,8 +19,10 @@ import { fieldClass } from '../../components/ui/fieldClass';
 import { cn } from '../../components/ui/cn';
 import { Skeleton } from '../../components/ui/Spinner';
 import { isString } from '../../hooks/guards';
+import { cleanSelection } from '../../shared/explain';
 import { useStoredValue } from '../../hooks/useStoredValue';
 import { callApi, type ExtensionError } from '../../shared/messages';
+import { useGuest } from '../shared/guest';
 import { MicButton, SpeechNotice } from '../shared/MicButton';
 import { useSpeechInput } from '../shared/speech';
 import { insertIntoField, readFocusedField, readPageSelection, type FocusedField } from './pageBridgeClient';
@@ -35,12 +37,6 @@ const DEFAULT_TARGET = 'en';
 const DEFAULT_SOURCE = 'hi';
 const NO_FAVORITES: readonly string[] = [];
 
-/** Same words ignoring spacing and case, so a selection matches the box it was highlighted in. */
-function sameText(a: string, b: string): boolean {
-  const norm = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
-  const x = norm(a);
-  return x.length > 0 && x === norm(b);
-}
 
 interface Translation {
   /** The source language the request used ("auto" when it was detected). */
@@ -82,6 +78,7 @@ export function TranslatorView({ settings, active = true }: TranslatorViewProps)
   const [insertError, setInsertError] = useState<string | null>(null);
   const [dashboardFailed, setDashboardFailed] = useState(false);
   const { credits, refresh: refreshCredits } = useCredits();
+  const guest = useGuest();
 
   /** Latest request id. Responses to older requests are ignored. */
   const requestSeq = useRef(0);
@@ -136,11 +133,12 @@ export function TranslatorView({ settings, active = true }: TranslatorViewProps)
     let alive = true;
     void Promise.all([readFocusedField(), readPageSelection()]).then(([found, selected]) => {
       if (!alive) return;
-      // The "You selected" card already shows highlighted text, so do not copy it into this box as well.
-      const dup = found && selected && sameText(found.info.text, selected.info.text);
-      setField(found && dup ? { ...found, info: { ...found.info, text: '' } } : found);
+      setField(found);
       // A box Verba picked itself (the user never clicked it) is only an insert target: never prefill from it.
-      if (found && !found.info.guessed && !dup) setText((prev) => (prev === '' ? found.info.text : prev));
+      const fromBox = found && !found.info.guessed ? found.info.text : '';
+      // Highlighted text on the page goes into the box too, so translating it needs no copy and paste.
+      const highlighted = cleanSelection(selected?.info.text) ?? '';
+      setText((prev) => (prev === '' ? (fromBox.trim() ? fromBox : highlighted) : prev));
     });
     return () => {
       alive = false;
@@ -149,12 +147,14 @@ export function TranslatorView({ settings, active = true }: TranslatorViewProps)
 
   // Auto-translate the prefilled text once, after both the page text and the remembered language are known.
   useEffect(() => {
-    if (autoRan.current || requestSeq.current > 0 || field === undefined || !targetLoaded) return;
+    // A visitor presses Translate themselves. Not marked as done, so it still runs once they have signed in.
+    if (autoRan.current || requestSeq.current > 0 || field === undefined || !targetLoaded || guest.isGuest) return;
     autoRan.current = true;
-    if (field && !field.info.guessed && field.info.text.trim()) {
+    // A visitor has only a few free prompts: they press Translate themselves instead of Verba spending one on open.
+    if (!guest.isGuest && field && !field.info.guessed && field.info.text.trim()) {
       void run(field.info.text.trim(), source, target);
     }
-  }, [field, targetLoaded, target, source, run]);
+  }, [field, targetLoaded, target, source, run, guest.isGuest]);
 
   function translate() {
     if (!canTranslate) return;

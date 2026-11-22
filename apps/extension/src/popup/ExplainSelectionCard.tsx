@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { PENDING_EXPLAIN_KEY, cleanSelection, type PendingExplain } from '../shared/explain';
 import { readPageSelection, type PageSelection } from './translator/pageBridgeClient';
 import { ReplyPanel } from './reply/ReplyPanel';
+import { useGuest } from './shared/guest';
 
 const PREVIEW_CHARS = 140;
 
@@ -25,6 +26,7 @@ export function ExplainSelectionCard({ settings = null }: ExplainSelectionCardPr
   /** Set on the first open and kept mounted after that, so toggling does not request (and spend) new replies. */
   const [replyMounted, setReplyMounted] = useState(false);
   const replyId = useId();
+  const guest = useGuest();
 
   useEffect(() => {
     let alive = true;
@@ -65,7 +67,12 @@ export function ExplainSelectionCard({ settings = null }: ExplainSelectionCardPr
         </p>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Button icon={Lightbulb} fullWidth onClick={() => explain(selection.tabId, text, selection.info.site)}>
+        <Button
+          icon={Lightbulb}
+          fullWidth
+          // Explain needs an account; for a visitor the button leads to sign-in instead of failing.
+          onClick={() => (guest.isGuest ? guest.openAuth('signin') : explain(selection.tabId, text, selection.info.site))}
+        >
           Explain
         </Button>
         <Button

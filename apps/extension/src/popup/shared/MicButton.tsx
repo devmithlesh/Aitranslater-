@@ -43,17 +43,29 @@ function openMicPermissionPage(): void {
 /** Live status under the input: "Listening…" or what went wrong, with a fix for the permission case. */
 export function SpeechNotice({ speech }: { speech: SpeechInput }) {
   if (speech.listening) {
+    // Say what stage the microphone is at, so a silent failure is visible instead of looking like it works.
+    const stage = !speech.audioOn
+      ? 'Starting the microphone…'
+      : speech.quiet && !speech.heardSpeech
+        ? 'The microphone is on but hears nothing. Check it is the right one and not muted.'
+        : speech.heardSpeech
+          ? 'Listening… tap the square to stop.'
+          : 'Speak now… tap the square to stop.';
     return (
-      <p role="status" className="flex items-center gap-1.5 text-[11.5px] text-danger">
-        <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-danger" />
-        Listening… tap the square to stop.
-      </p>
+      <div className="space-y-1">
+        <p role="status" className="flex items-center gap-1.5 text-[11.5px] text-danger">
+          <span aria-hidden className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-danger" />
+          {stage}
+        </p>
+        {speech.problem && <p role="alert" className="text-[11.5px] text-danger">{SPEECH_MESSAGES[speech.problem]}</p>}
+      </div>
     );
   }
   if (!speech.problem) return null;
   return (
     <div role="alert" className="space-y-1.5 text-[11.5px] text-danger">
       <p>{SPEECH_MESSAGES[speech.problem]}</p>
+      {speech.errorCode && speech.problem !== 'permission' && <p className="text-[10.5px] text-subtle">Code: {speech.errorCode}</p>}
       {speech.problem === 'permission' && (
         <button
           type="button"

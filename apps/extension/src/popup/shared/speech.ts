@@ -21,6 +21,7 @@ interface Recognition {
   onerror: ((event: { error: string }) => void) | null;
   onend: (() => void) | null;
   onaudiostart: (() => void) | null;
+  onspeechstart: (() => void) | null;
   start(): void;
   stop(): void;
   abort(): void;
@@ -89,7 +90,15 @@ function problemFor(error: string): SpeechProblem | null {
 export interface SpeechInput {
   supported: boolean;
   listening: boolean;
+  /** The microphone is open (the browser started capturing sound). */
+  audioOn: boolean;
+  /** Some speech was recognised or detected since listening began. */
+  heardSpeech: boolean;
+  /** Listening for a while but nothing was heard: the wrong or a muted microphone. */
+  quiet: boolean;
   problem: SpeechProblem | null;
+  /** The browser's own error code for the last failure, to show when the cause is unclear. */
+  errorCode: string | null;
   /** Starts listening. `base` is the text already in the box; spoken words are added after it. */
   start: (base: string) => void;
   stop: () => void;
@@ -102,6 +111,10 @@ export interface SpeechInput {
 export function useSpeechInput(lang: string, onText: (text: string) => void): SpeechInput {
   const [listening, setListening] = useState(false);
   const [problem, setProblem] = useState<SpeechProblem | null>(null);
+  const [audioOn, setAudioOn] = useState(false);
+  const [heardSpeech, setHeardSpeech] = useState(false);
+  const [quiet, setQuiet] = useState(false);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const onTextRef = useRef(onText);
   onTextRef.current = onText;
@@ -133,6 +146,8 @@ export function useSpeechInput(lang: string, onText: (text: string) => void): Sp
       const prefix = base.trim() === '' ? '' : `${base.trimEnd()} `;
       let finalText = '';
       rec.onresult = (event) => {
+        setHeardSpeech(true);
+        setQuiet(false);
         let interim = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
@@ -144,21 +159,39 @@ export function useSpeechInput(lang: string, onText: (text: string) => void): Sp
       };
       rec.onerror = (event) => {
         const found = problemFor(event.error);
-        if (found) setProblem(found);
+        if (found) {
+          setProblem(found);
+          setErrorCode(event.error);
+        }
+      };
+      rec.onspeechstart = () => {
+        setHeardSpeech(true);
+        setQuiet(false);
       };
       let heardAudio = false;
       let watchdog: number | undefined;
+      let quietTimer: number | undefined;
       rec.onaudiostart = () => {
         heardAudio = true;
         window.clearTimeout(watchdog);
+        setAudioOn(true);
+        // The microphone is open but no sound has been picked up for a while.
+        quietTimer = window.setTimeout(() => setQuiet(true), 7000);
       };
       rec.onend = () => {
         window.clearTimeout(watchdog);
+        window.clearTimeout(quietTimer);
+        setAudioOn(false);
+        setQuiet(false);
         if (recognition.current === rec) recognition.current = null;
         setListening(false);
       };
       recognition.current = rec;
       setProblem(null);
+      setErrorCode(null);
+      setAudioOn(false);
+      setHeardSpeech(false);
+      setQuiet(false);
       try {
         rec.start();
         setListening(true);
@@ -213,5 +246,5 @@ export function useSpeechInput(lang: string, onText: (text: string) => void): Sp
     [],
   );
 
-  return { supported, listening, problem, start, stop, abort, toggle };
+  return { supported, listening, audioOn, heardSpeech, quiet, problem, errorCode, start, stop, abort, toggle };
 }

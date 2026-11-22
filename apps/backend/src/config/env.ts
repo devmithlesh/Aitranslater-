@@ -41,6 +41,12 @@ export interface AppConfig {
   /** Per client IP, for POST /auth/login, /auth/signup and /auth/google (15-minute window). */
   rateLimitAuthPer15Min: number;
   trustProxy: boolean;
+  /** Free prompts per day for a visitor who is not signed in (per install). 0 turns guest use off. */
+  guestDailyLimit: number;
+  /** Cap per client IP across all guests, so reinstalling the extension does not give endless free prompts. */
+  guestIpDailyLimit: number;
+  /** Cap on all guest prompts together per day (a cost ceiling). 0 means no global cap. */
+  guestGlobalDailyLimit: number;
   /** OAuth Web client id for Google sign-in. null disables the button and POST /auth/google. */
   googleClientId: string | null;
   /** Admin account seeded on boot. Both null when not configured. */
@@ -81,6 +87,9 @@ const envSchema = z
     RATE_LIMIT_PER_MINUTE: z.coerce.number().int().min(1).max(100000).default(300),
     AUTH_RATE_LIMIT_PER_15_MIN: z.coerce.number().int().min(1).max(100000).default(20),
     TRUST_PROXY: flag('false'),
+    GUEST_DAILY_LIMIT: z.coerce.number().int().min(0).max(1000).default(5),
+    GUEST_IP_DAILY_LIMIT: z.coerce.number().int().min(0).max(100000).default(25),
+    GUEST_GLOBAL_DAILY_LIMIT: z.coerce.number().int().min(0).max(10000000).default(1000),
     GOOGLE_CLIENT_ID: z.string().optional(),
     ADMIN_EMAIL: z
       .string()
@@ -160,6 +169,9 @@ export function loadConfig(env: Readonly<Record<string, string | undefined>>): A
     rateLimitPerMinute: data.RATE_LIMIT_PER_MINUTE,
     rateLimitAuthPer15Min: data.AUTH_RATE_LIMIT_PER_15_MIN,
     trustProxy: data.TRUST_PROXY,
+    guestDailyLimit: data.GUEST_DAILY_LIMIT,
+    guestIpDailyLimit: data.GUEST_IP_DAILY_LIMIT,
+    guestGlobalDailyLimit: data.GUEST_GLOBAL_DAILY_LIMIT,
     googleClientId: data.GOOGLE_CLIENT_ID ?? null,
     adminEmail: data.ADMIN_EMAIL ?? null,
     adminPassword: data.ADMIN_PASSWORD ?? null,

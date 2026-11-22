@@ -10,6 +10,7 @@ const WRITE_BODY_LIMIT = '12mb';
 export function createAiRouter(services: Services, aiLimiter: RequestHandler): Router {
   const router = Router();
   const ctrl = createAiController(services);
+  router.get('/guest/credits', ctrl.guestCredits);
   router.post('/translate', aiLimiter, ctrl.translate);
   router.post('/detect-language', aiLimiter, ctrl.detectLanguage);
   router.post('/grammar', aiLimiter, ctrl.grammar);

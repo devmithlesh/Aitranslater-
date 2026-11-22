@@ -23,6 +23,26 @@ export async function readConnection(): Promise<StoredConnection | null> {
   return apiUrl === value.apiUrl ? value : { ...value, apiUrl };
 }
 
+/** A random id for this install, made once. The server counts a signed-out visitor's free prompts under it. */
+let guestIdPending: Promise<string> | null = null;
+export function readGuestId(): Promise<string> {
+  // Several popup views ask at once on first open: they must all get the same id.
+  guestIdPending ??= loadGuestId().catch((err: unknown) => {
+    guestIdPending = null;
+    throw err;
+  });
+  return guestIdPending;
+}
+
+async function loadGuestId(): Promise<string> {
+  const raw = await chrome.storage.local.get(STORAGE_KEYS.guestId);
+  const value: unknown = raw[STORAGE_KEYS.guestId];
+  if (typeof value === 'string' && /^[A-Za-z0-9-]{16,64}$/.test(value)) return value;
+  const id = crypto.randomUUID();
+  await chrome.storage.local.set({ [STORAGE_KEYS.guestId]: id });
+  return id;
+}
+
 export async function writeConnection(connection: StoredConnection): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEYS.connection]: connection });
 }
