@@ -34,6 +34,43 @@ export interface HttpRequest {
 
 const MAX_DETAIL_CHARS = 200;
 
+/** Statuses that mean "busy or briefly down, try again" rather than "this request is wrong". */
+const RETRYABLE_STATUS: ReadonlySet<number> = new Set([429, 500, 502, 503, 504]);
+/** Waits before the 2nd and 3rd attempt. Short, so a brief spike is ridden out without a long wait. */
+export const RETRY_DELAYS_MS: number[] = [800, 2000];
+/** A Retry-After longer than this is not worth waiting for inside one request. */
+const MAX_RETRY_AFTER_MS = 4000;
+
+/** True when the status means the provider is busy or briefly unavailable. */
+export function isBusyStatus(status: number): boolean {
+  return status === 429 || status === 503;
+}
+
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason instanceof Error ? signal.reason : new Error('Request aborted.'));
+      return;
+    }
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal.reason instanceof Error ? signal.reason : new Error('Request aborted.'));
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/** Milliseconds from a Retry-After header (seconds), or undefined. */
+function retryAfterMs(response: Response): number | undefined {
+  const raw = response.headers.get('retry-after');
+  const seconds = raw ? Number(raw) : NaN;
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : undefined;
+}
+
 function isNamedError(err: unknown, name: string): boolean {
   return isRecord(err) && err.name === name;
 }
@@ -80,16 +117,28 @@ export async function requestJson(request: HttpRequest): Promise<unknown> {
 
   let response: Response;
   let text: string;
-  try {
-    response = await fetch(request.url, {
-      method: request.method ?? 'POST',
-      headers,
-      body: request.body === undefined ? undefined : JSON.stringify(request.body),
-      signal,
-    });
-    text = await response.text();
-  } catch (err) {
-    throw transportError(request, label, err);
+  for (let attempt = 0; ; attempt++) {
+    try {
+      response = await fetch(request.url, {
+        method: request.method ?? 'POST',
+        headers,
+        body: request.body === undefined ? undefined : JSON.stringify(request.body),
+        signal,
+      });
+      text = await response.text();
+    } catch (err) {
+      throw transportError(request, label, err);
+    }
+    // A busy or briefly failing provider often answers on the next try (Gemini: "high demand").
+    const delay = RETRY_DELAYS_MS[attempt];
+    if (response.ok || !RETRYABLE_STATUS.has(response.status) || delay === undefined) break;
+    const wait = retryAfterMs(response) ?? delay;
+    if (wait > MAX_RETRY_AFTER_MS) break;
+    try {
+      await sleep(wait, signal);
+    } catch (err) {
+      throw transportError(request, label, err);
+    }
   }
 
   const redact = request.redact ?? [];

@@ -1,3 +1,4 @@
+import { RETRY_DELAYS_MS } from '../src/providers/http';
 import { WRITE_PROMPT_MAX_LENGTH } from '@verba/shared';
 import request from 'supertest';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -154,5 +155,54 @@ describe('POST /api/write', () => {
     expect(translate.status).toBe(write.status);
     expect(translate.body.error.code).toBe(write.body.error.code);
     expect(translate.body.error.message).toBe(write.body.error.message);
+  });
+});
+
+describe('a busy AI provider (HTTP 503 "high demand")', () => {
+  let h: Harness;
+  const original = [...RETRY_DELAYS_MS];
+
+  beforeEach(async () => {
+    h = await createHarness();
+    await request(h.app).put('/api/providers/gemini').set(AUTH).send({ apiKey: GEMINI_KEY });
+    RETRY_DELAYS_MS.splice(0, RETRY_DELAYS_MS.length, 1, 1);
+  });
+
+  afterEach(async () => {
+    RETRY_DELAYS_MS.splice(0, RETRY_DELAYS_MS.length, ...original);
+    vi.unstubAllGlobals();
+    await h.close();
+  });
+
+  const busy = () => jsonResponse({ error: { message: 'This model is currently experiencing high demand.' } }, 503);
+
+  it('tries again by itself and returns the answer when the next try works', async () => {
+    let calls = 0;
+    const fetchMock = mockFetch((url) => {
+      if (!url.includes('generativelanguage.googleapis.com')) return unexpectedUrl(url);
+      calls += 1;
+      return calls === 1 ? busy() : geminiText(LETTER);
+    });
+    const res = await request(h.app).post('/api/write').set(AUTH).send({ prompt: 'write a note' });
+    expect(res.status).toBe(200);
+    expect(res.body.result).toBe(LETTER);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('says the AI is busy (not "check the settings") when it stays busy, and gives the credit back', async () => {
+    const fetchMock = mockFetch((url) => (url.includes('generativelanguage.googleapis.com') ? busy() : unexpectedUrl(url)));
+    const res = await request(h.app).post('/api/write').set(AUTH).send({ prompt: 'write a note' });
+    expect(res.status).toBe(502);
+    expect(res.body.error.message).toContain('busy');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect((await request(h.app).get('/api/me').set(AUTH)).body.credits).toMatchObject({ used: 0 });
+  });
+
+  it('does not retry a request the provider rejected as wrong (HTTP 400)', async () => {
+    const fetchMock = mockFetch((url) =>
+      url.includes('generativelanguage.googleapis.com') ? jsonResponse({ error: { message: 'bad request' } }, 400) : unexpectedUrl(url),
+    );
+    await request(h.app).post('/api/write').set(AUTH).send({ prompt: 'write a note' });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
