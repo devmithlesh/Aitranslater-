@@ -19,7 +19,7 @@ import { useSaveSettings } from '../../hooks/useSaveSettings';
 import type { ExtensionState } from '../../shared/messages';
 import { Field, Notice, SectionCard } from './SectionCard';
 
-export const MAX_FAVORITE_LANGUAGES = 12;
+const MAX_FAVORITE_LANGUAGES = 12;
 
 interface LanguageDraft {
   targetLang: string;

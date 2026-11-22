@@ -41,7 +41,7 @@ describe('POST /api/write', () => {
     expect(res.status).toBe(200);
     expect(res.body.result).toBe(LETTER);
     expect(res.body.provider).toBe('gemini');
-    expect(res.body.historyId).toEqual(expect.any(String));
+    expect(res.body.historyId).toBeUndefined();
     expect(res.body.latencyMs).toEqual(expect.any(Number));
     expect(JSON.stringify(res.body)).not.toContain(GEMINI_KEY);
 

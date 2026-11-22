@@ -39,6 +39,8 @@ export function ExplainSelectionCard({ settings = null }: ExplainSelectionCardPr
   }, []);
 
   if (!selection) return null;
+  // Text highlighted in the message box is the user's own: there is nothing to explain or reply to.
+  if (selection.info.inEditable) return null;
   const text = cleanSelection(selection.info.text);
   if (!text) return null;
   const preview = text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS).trimEnd()}…` : text;

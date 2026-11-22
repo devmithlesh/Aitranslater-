@@ -15,7 +15,7 @@ describe('request policy', () => {
   it('denies content scripts every request except opening the popup', () => {
     const content = 'content' as const;
     expect(isRequestAllowed(content, { type: 'verba:api', method: 'POST', path: '/translate-variants' })).toBe(false);
-    expect(isRequestAllowed(content, { type: 'verba:api', method: 'DELETE', path: '/history' })).toBe(false);
+    expect(isRequestAllowed(content, { type: 'verba:api', method: 'DELETE', path: '/providers' })).toBe(false);
     expect(isRequestAllowed(content, { type: 'verba:get-state' })).toBe(false);
     expect(isRequestAllowed(content, { type: 'verba:open-options' })).toBe(false);
     expect(isRequestAllowed(content, { type: 'verba:login', email: 'a@b.co', password: 'x' })).toBe(false);
@@ -32,7 +32,7 @@ describe('request policy', () => {
   it('lets extension pages use any safe path but rejects traversal and absolute URLs', () => {
     const ext = 'extension' as const;
     expect(isRequestAllowed(ext, { type: 'verba:api', method: 'GET', path: '/providers' })).toBe(true);
-    expect(isRequestAllowed(ext, { type: 'verba:api', method: 'GET', path: '/history?type=translate' })).toBe(true);
+    expect(isRequestAllowed(ext, { type: 'verba:api', method: 'GET', path: '/stats?days=7' })).toBe(true);
     expect(isRequestAllowed(ext, { type: 'verba:api', method: 'GET', path: '/../admin' })).toBe(false);
     expect(isRequestAllowed(ext, { type: 'verba:api', method: 'GET', path: '//evil.example/x' })).toBe(false);
     expect(isRequestAllowed(ext, { type: 'verba:api', method: 'GET', path: 'https://evil.example' })).toBe(false);

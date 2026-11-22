@@ -39,7 +39,7 @@ describe('translation routing', () => {
     const calledUrl = new URL(String(fetchMock.mock.calls[0][0]));
     expect(calledUrl.searchParams.get('langpair')).toBe('en|es');
     expect(calledUrl.searchParams.get('q')).toBe('Hello, how are you?');
-    expect(res.body.historyId).toEqual(expect.any(String));
+    expect(res.body.historyId).toBeUndefined();
   });
 
   it('uses Autodetect for an auto source language', async () => {

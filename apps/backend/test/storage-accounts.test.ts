@@ -1,7 +1,7 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DEFAULT_SETTINGS, type HistoryItem } from '@verba/shared';
+import { DEFAULT_SETTINGS } from '@verba/shared';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { FileStorage } from '../src/storage/file-storage';
 import type { CreditLedger, StoredAppConfig, StoredSession, StoredUser } from '../src/storage/types';
@@ -35,19 +35,6 @@ function makeSession(overrides: Partial<StoredSession> = {}): StoredSession {
     expiresAt: '2026-02-01T00:00:00.000Z',
     ...overrides,
   };
-}
-
-function makeHistoryItem(id: string, createdAt: string): HistoryItem {
-  return {
-    id,
-    type: 'translate',
-    input: `input ${id}`,
-    output: `output ${id}`,
-    meta: { provider: 'gemini' },
-    client: 'web',
-    favorite: false,
-    createdAt,
-  } as HistoryItem;
 }
 
 describe('FileStorage accounts, sessions, config and credits', () => {
@@ -126,19 +113,23 @@ describe('FileStorage accounts, sessions, config and credits', () => {
     await storage.saveUser(makeUser({ id: 'user-b', email: 'bob@example.com' }));
     const settings = { ...DEFAULT_SETTINGS, updatedAt: CREATED };
     await storage.saveSettings('user-a', settings);
-    await storage.insertHistory('user-a', makeHistoryItem('h1', CREATED));
     await storage.saveCredits('user-a', { daily: { '2026-01-01': 3 }, total: 3 });
     await storage.saveSession(makeSession({ id: 's-a1', userId: 'user-a', tokenHash: 'a'.repeat(64) }));
     await storage.saveSession(makeSession({ id: 's-a2', userId: 'user-a', tokenHash: 'c'.repeat(64) }));
     await storage.saveSettings('user-b', settings);
     await storage.saveCredits('user-b', { daily: { '2026-01-01': 1 }, total: 1 });
     await storage.saveSession(makeSession({ id: 's-b1', userId: 'user-b', tokenHash: 'b'.repeat(64) }));
+    const note = { category: 'idea' as const, client: 'extension' as const, version: null, createdAt: CREATED };
+    await storage.insertFeedback({ id: 'f-a', userId: 'user-a', message: 'my phone is 9999999999', ...note });
+    await storage.insertFeedback({ id: 'f-b', userId: 'user-b', message: 'nice work', ...note });
 
     expect(await storage.deleteUser('user-a')).toBe(true);
 
+    // Feedback can hold personal details, so it goes with the account; other people's feedback stays.
+    expect((await storage.listFeedback(10)).map((item) => item.id)).toEqual(['f-b']);
+
     expect(await storage.getUser('user-a')).toBeUndefined();
     expect(await storage.getSettings('user-a')).toBeUndefined();
-    expect((await storage.queryHistory('user-a', { offset: 0, limit: 10 })).total).toBe(0);
     expect(await storage.getCredits('user-a')).toBeUndefined();
     expect(await storage.findSessionByTokenHash('a'.repeat(64))).toBeUndefined();
     expect(await storage.findSessionByTokenHash('c'.repeat(64))).toBeUndefined();
@@ -263,7 +254,7 @@ describe('FileStorage accounts, sessions, config and credits', () => {
     expect(stored?.total).toBe(70);
   });
 
-  it('includes stored user ids in listUserIds so history pruning reaches them', async () => {
+  it('includes stored user ids in listUserIds', async () => {
     await storage.saveUser(makeUser({ id: 'account-only' }));
     expect(await storage.listUserIds()).toContain('account-only');
   });
@@ -338,6 +329,21 @@ describe('FileStorage accounts, sessions, config and credits', () => {
       }
     } finally {
       rmSync(legacyDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('FileStorage and the old history file', () => {
+  it('deletes a history.json left by an older version when it starts, so no old text stays on disk', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'verba-old-history-'));
+    try {
+      writeFileSync(join(dir, 'history.json'), JSON.stringify({ someone: [{ id: 'x', input: 'private words' }] }));
+      const store = new FileStorage(dir);
+      await store.init();
+      expect(existsSync(join(dir, 'history.json'))).toBe(false);
+      await store.close();
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
     }
   });
 });

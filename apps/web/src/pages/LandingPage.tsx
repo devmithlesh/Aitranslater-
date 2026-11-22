@@ -59,6 +59,9 @@ export default function LandingPage() {
       <header className="flex h-16 items-center justify-between border-b border-border px-4 sm:px-6">
         <Logo />
         <nav aria-label="Account" className="flex items-center gap-2 text-[13.5px]">
+          <Link to="/guide" className="hidden rounded-lg px-3 py-1.5 font-medium text-muted hover:text-fg sm:inline-block">
+            How to use
+          </Link>
           <Link to="/login" className="rounded-lg px-3 py-1.5 font-medium text-muted hover:text-fg">
             Sign in
           </Link>
@@ -117,6 +120,12 @@ export default function LandingPage() {
       </main>
 
       <footer className="border-t border-border px-4 py-6 text-center text-[13px] text-subtle sm:px-6">
+        <Link to="/guide" className="hover:text-fg">
+          How to use
+        </Link>
+        <span className="mx-2" aria-hidden>
+          ·
+        </span>
         <Link to="/privacy" className="hover:text-fg">
           Privacy policy
         </Link>

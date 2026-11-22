@@ -18,21 +18,9 @@ create table if not exists public.custom_assistants (
 create index if not exists custom_assistants_user_created_idx
   on public.custom_assistants (user_id, created_at);
 
-create table if not exists public.history_items (
-  id text primary key,
-  user_id text not null,
-  type text not null,
-  favorite boolean not null default false,
-  input text not null,
-  output text not null,
-  meta jsonb not null default '{}'::jsonb,
-  client text not null check (client in ('web', 'extension')),
-  created_at timestamptz not null default now()
-);
-create index if not exists history_items_user_created_idx
-  on public.history_items (user_id, created_at desc);
-create index if not exists history_items_user_favorite_idx
-  on public.history_items (user_id, favorite);
+-- Verba no longer keeps a history of what people translate or ask. If an older version created this table, it is
+-- removed here together with every row in it (this is the cleanup to run once on an existing database).
+drop table if exists public.history_items;
 
 create table if not exists public.provider_configs (
   user_id text not null,
@@ -103,7 +91,6 @@ create table if not exists public.credit_ledgers (
 
 alter table public.user_settings enable row level security;
 alter table public.custom_assistants enable row level security;
-alter table public.history_items enable row level security;
 alter table public.provider_configs enable row level security;
 alter table public.usage_stats enable row level security;
 alter table public.activity_stats enable row level security;
@@ -113,7 +100,7 @@ alter table public.app_sessions enable row level security;
 alter table public.app_config enable row level security;
 alter table public.credit_ledgers enable row level security;
 
--- Product feedback from the extension. Not deleted with the account (no FK); read it in the Supabase table editor.
+-- Product feedback from the extension. The backend deletes a user's rows when the account is deleted; read it in the Supabase table editor.
 create table if not exists public.feedback (
   id text primary key,
   user_id text not null,

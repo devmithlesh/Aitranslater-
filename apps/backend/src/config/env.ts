@@ -6,7 +6,7 @@ import { parseEncryptionKey } from '../utils/crypto';
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Provider secrets and endpoints read from the environment (see .env.example). */
-export const PROVIDER_ENV_KEYS = [
+const PROVIDER_ENV_KEYS = [
   'GEMINI_API_KEY',
   'GROQ_API_KEY',
   'OPENROUTER_API_KEY',

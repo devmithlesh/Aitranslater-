@@ -1,8 +1,5 @@
-import { ExternalLink, KeyRound, MousePointerClick, ShieldCheck, Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { openDashboard } from '../../components/navigation';
-import { Button } from '../../components/ui/Button';
-import { Notice, SectionCard } from './SectionCard';
+import { KeyRound, MousePointerClick, ShieldCheck, Trash2 } from 'lucide-react';
+import { SectionCard } from './SectionCard';
 
 const POINTS = [
   {
@@ -22,8 +19,8 @@ const POINTS = [
   },
   {
     icon: Trash2,
-    title: 'History is yours to control',
-    body: 'You can turn history off or clear it in the dashboard at any time.',
+    title: 'No history is kept',
+    body: 'Verba does not save the text you translate or the answers you get. Only simple usage counts are kept.',
   },
   {
     icon: KeyRound,
@@ -33,14 +30,6 @@ const POINTS = [
 ] as const;
 
 export function PrivacySection() {
-  const [openError, setOpenError] = useState(false);
-
-  async function openHistorySettings() {
-    setOpenError(false);
-    const res = await openDashboard('/settings/general');
-    if (!res.ok) setOpenError(true);
-  }
-
   return (
     <SectionCard id="privacy" title="Privacy" description="What Verba sends, where it goes, and what stays on this device.">
       <ul className="space-y-4">
@@ -56,14 +45,6 @@ export function PrivacySection() {
           </li>
         ))}
       </ul>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <p className="text-[12.5px] text-muted">Manage history and retention in the dashboard.</p>
-        <Button variant="outline" size="sm" icon={ExternalLink} onClick={() => void openHistorySettings()}>
-          Open history settings
-        </Button>
-      </div>
-      {openError && <Notice tone="error">Could not open the dashboard. Try again.</Notice>}
     </SectionCard>
   );
 }

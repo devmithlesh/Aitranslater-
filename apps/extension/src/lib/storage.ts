@@ -2,7 +2,7 @@ import { replaceRetiredApiUrl } from '@verba/shared';
 import { DEFAULT_API_URL, DEFAULT_DASHBOARD_URL, STORAGE_KEYS, type ExtensionState, type StoredConnection } from '../shared/messages';
 import { isExtensionState, isStoredConnection } from './guards';
 
-export function emptyState(): ExtensionState {
+function emptyState(): ExtensionState {
   return {
     connected: false,
     apiUrl: null,

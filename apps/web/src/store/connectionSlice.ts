@@ -19,7 +19,14 @@ function load(): ConnectionState {
       // A saved server URL only matters together with a token. Signed out, always use this build's
       // server (VITE_API_URL), so a stale saved URL (e.g. localhost from an earlier build) can't break login.
       if (typeof parsed.apiUrl === 'string' && typeof parsed.token === 'string' && parsed.token) {
-        return { apiUrl: replaceRetiredApiUrl(parsed.apiUrl, DEFAULT_API_URL), token: parsed.token, unauthorized: false };
+        const saved = replaceRetiredApiUrl(parsed.apiUrl, DEFAULT_API_URL);
+        // The website itself is never the API (unless this build was set up to proxy it): a saved address that is
+        // this page's own origin is left over from an earlier dev setup and would answer every call with 404.
+        const ownOrigin = normalizeApiUrl(window.location.origin);
+        if (saved === ownOrigin && DEFAULT_API_URL !== ownOrigin) {
+          return { apiUrl: DEFAULT_API_URL, token: null, unauthorized: false };
+        }
+        return { apiUrl: saved, token: parsed.token, unauthorized: false };
       }
     }
   } catch {

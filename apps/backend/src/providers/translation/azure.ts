@@ -53,22 +53,5 @@ export function createAzureProvider(http: HttpOptions): TranslationProvider {
         detectedSourceLang: detectedCode ? normalizeLanguage(detectedCode) : undefined,
       };
     },
-    async detect(text, cfg, signal) {
-      const data = await requestJson({
-        provider: PROVIDER,
-        url: endpoint('/detect', {}),
-        headers: authHeaders(cfg),
-        body: [{ Text: text }],
-        signal,
-        timeoutMs: http.timeoutMs,
-        redact: [requireKey(cfg)],
-      });
-      const first: unknown = Array.isArray(data) ? data[0] : undefined;
-      if (!isRecord(first) || typeof first.language !== 'string') {
-        throw new ProviderError(PROVIDER, 'Azure Translator returned no language detection.');
-      }
-      const confidence = typeof first.score === 'number' ? first.score : undefined;
-      return { language: normalizeLanguage(first.language), confidence };
-    },
   };
 }

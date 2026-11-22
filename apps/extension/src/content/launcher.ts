@@ -26,7 +26,7 @@ const SIZE = 32;
 const MARGIN = 10;
 const HIDE_DELAY_MS = 250;
 
-export function isMailHost(hostname: string): boolean {
+function isMailHost(hostname: string): boolean {
   const host = hostname.toLowerCase();
   return MAIL_HOSTS.some((mail) => host === mail || host.endsWith(`.${mail}`));
 }

@@ -86,7 +86,7 @@ async function checkServer(apiUrl: string): Promise<Result<null>> {
  * The one save step for every sign-in method: verifies the token, persists the
  * connection, and syncs. Callers must have checked the server first.
  */
-export async function saveConnection(apiUrl: string, token: string, dashboardUrl: string): Promise<Result<ExtensionState>> {
+async function saveConnection(apiUrl: string, token: string, dashboardUrl: string): Promise<Result<ExtensionState>> {
   const verify = await fetchBackend({ apiUrl, token }, 'GET', '/auth/verify');
   if (!verify.ok) {
     if (verify.error.status === 401) {

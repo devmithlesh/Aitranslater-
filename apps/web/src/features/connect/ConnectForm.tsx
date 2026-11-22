@@ -100,7 +100,7 @@ export function ConnectForm({ initialCode, initialUrl, redirectTo, unauthorized 
     <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-pop animate-scale-in">
       <div className="space-y-1 px-6 pb-5 pt-6 sm:px-8">
         <h1 className="text-xl font-semibold tracking-tight text-fg">Connect to your Verba server</h1>
-        <p className="text-[13.5px] text-muted">Your settings, history and API keys live on your server. This browser only keeps the link.</p>
+        <p className="text-[13.5px] text-muted">Your settings and API keys live on your server. This browser only keeps the link.</p>
       </div>
 
       <form onSubmit={handleSubmit} noValidate className="space-y-5 px-6 pb-6 sm:px-8">

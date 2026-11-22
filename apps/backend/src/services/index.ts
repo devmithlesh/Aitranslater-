@@ -5,7 +5,7 @@ import { AuthService } from './auth.service';
 import { AiService } from './ai.service';
 import { CreditsService } from './credits.service';
 import { FeedbackService } from './feedback.service';
-import { HistoryService } from './history.service';
+import { ActivityService } from './activity.service';
 import { ProviderRegistry } from './provider-registry';
 import { SettingsService } from './settings.service';
 import { StatsService } from './stats.service';
@@ -16,7 +16,7 @@ import { UsersService } from './users.service';
 export interface Services {
   settings: SettingsService;
   usage: UsageService;
-  history: HistoryService;
+  activity: ActivityService;
   registry: ProviderRegistry;
   translation: TranslationService;
   ai: AiService;
@@ -40,11 +40,11 @@ export function createServices(
 ): Services {
   const settings = new SettingsService(storage, now);
   const usage = new UsageService(storage, now);
-  const history = new HistoryService(storage, usage);
+  const activity = new ActivityService(usage);
   const registry = new ProviderRegistry(storage, usage, config, encryptionKey, now);
-  const translation = new TranslationService(registry, settings, history);
-  const ai = new AiService(registry, settings, history, translation, storage, now);
-  const stats = new StatsService(storage, usage, history, now);
+  const translation = new TranslationService(registry, settings, activity);
+  const ai = new AiService(registry, activity, storage, now);
+  const stats = new StatsService(storage, usage, now);
   const credits = new CreditsService(storage, now, {
     dailyLimit: config.guestDailyLimit,
     ipDailyLimit: config.guestIpDailyLimit,
@@ -54,5 +54,5 @@ export function createServices(
   const admin = new AdminService(storage, registry, usage, now);
   const auth = new AuthService(config, storage, credits, now);
   const feedback = new FeedbackService(storage, now);
-  return { settings, usage, history, registry, translation, ai, stats, credits, users, admin, auth, feedback };
+  return { settings, usage, activity, registry, translation, ai, stats, credits, users, admin, auth, feedback };
 }

@@ -5,7 +5,7 @@ import { dayKey, monthKey } from '../utils/dates';
 import { AppError, unauthorized } from '../utils/errors';
 
 /** Runs tasks one at a time, so read-modify-write cycles on credits and user records cannot interleave. */
-export class Serializer {
+class Serializer {
   private queue: Promise<void> = Promise.resolve();
 
   run<T>(task: () => Promise<T>): Promise<T> {
@@ -38,7 +38,7 @@ export function effectiveLimit(user: StoredUser, config: StoredAppConfig): numbe
 }
 
 /** Next local midnight after `now`. */
-export function nextMidnight(now: Date): Date {
+function nextMidnight(now: Date): Date {
   return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
 }
 

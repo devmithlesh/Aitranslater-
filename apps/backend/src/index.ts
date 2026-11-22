@@ -6,9 +6,7 @@ import { encodeConnectionCode } from '@verba/shared';
 import { createStorage } from './storage';
 import type { Storage } from './storage/types';
 import { ensureAdminAccount } from './services/auth.service';
-import { pruneExpiredHistory } from './services/history.service';
 
-const PRUNE_INTERVAL_MS = 6 * 60 * 60 * 1000;
 const SHUTDOWN_TIMEOUT_MS = 5000;
 
 /** Prints a boxed block so the one-time token and connection code are easy to copy. */
@@ -61,24 +59,11 @@ async function main(): Promise<void> {
     }
   });
 
-  const runPrune = (): void => {
-    pruneExpiredHistory(storage).then(
-      (removed) => {
-        if (removed > 0) console.log(`Pruned ${removed} expired history item(s).`);
-      },
-      (err: unknown) => console.error('History retention prune failed:', err instanceof Error ? err.message : err),
-    );
-  };
-  runPrune();
-  const pruneTimer = setInterval(runPrune, PRUNE_INTERVAL_MS);
-  pruneTimer.unref();
-
   let shuttingDown = false;
   const shutdown = (signal: string): void => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.log(`${signal} received, shutting down.`);
-    clearInterval(pruneTimer);
     const forced = setTimeout(() => process.exit(1), SHUTDOWN_TIMEOUT_MS);
     forced.unref();
     server.close(() => {

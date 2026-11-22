@@ -4,13 +4,18 @@ import type { Storage } from '../storage/types';
 import type { SettingsPatch } from '../schemas';
 
 /** Merges stored settings over defaults so newly added keys get sensible values. */
-export function withDefaults(stored: UserSettings | undefined): UserSettings {
+function withDefaults(stored: UserSettings | undefined): UserSettings {
   if (!stored) {
     return { ...structuredClone(DEFAULT_SETTINGS), updatedAt: new Date(0).toISOString() };
   }
+  // Older saved settings may still carry the removed history options: drop them.
+  const { saveHistory: _saveHistory, historyRetentionDays: _retention, ...kept } = stored as UserSettings & {
+    saveHistory?: unknown;
+    historyRetentionDays?: unknown;
+  };
   return {
     ...structuredClone(DEFAULT_SETTINGS),
-    ...stored,
+    ...kept,
     extension: { ...structuredClone(DEFAULT_SETTINGS.extension), ...stored.extension },
   };
 }

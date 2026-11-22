@@ -3,7 +3,7 @@ import { Clock, LogIn } from 'lucide-react';
 import { useGuest } from '../shared/guest';
 
 /** "18 of 30 left today", "Unlimited", or null when there is nothing to show. */
-export function creditsText(credits: CreditStatus | null): string | null {
+function creditsText(credits: CreditStatus | null): string | null {
   if (!credits) return null;
   if (credits.limit === null) return 'Unlimited';
   if (credits.remaining === null) return null;

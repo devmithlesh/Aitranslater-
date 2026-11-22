@@ -1,7 +1,6 @@
 import { AUTO_LANGUAGE, HINGLISH } from '@verba/shared';
 import type {
   ClientKind,
-  DetectLanguageResponse,
   ProviderId,
   TranslateRequest,
   TranslateResponse,
@@ -12,7 +11,7 @@ import { normalizeDetectedLanguage } from '../utils/text';
 import { ProviderError } from '../providers/types';
 import { byPriority } from './provider-registry';
 import type { ProviderEntry, ProviderRegistry } from './provider-registry';
-import type { HistoryService } from './history.service';
+import type { ActivityService } from './activity.service';
 import type { SettingsService } from './settings.service';
 
 export interface TranslationOutcome {
@@ -63,7 +62,7 @@ export class TranslationService {
   constructor(
     private readonly registry: ProviderRegistry,
     private readonly settings: SettingsService,
-    private readonly history: HistoryService,
+    private readonly activity: ActivityService,
   ) {}
 
   /** Runs the translation chain without recording history (used by translate and the assistant). */
@@ -122,31 +121,10 @@ export class TranslationService {
     const { userId, client, request, signal } = args;
     const settings = await this.settings.get(userId);
     const outcome = await this.execute(userId, request, signal, settings);
-
-    let historyId: string | undefined;
     try {
-      historyId = await this.history.record({
-        userId,
-        client,
-        type: 'translate',
-        input: request.text,
-        output: outcome.translatedText,
-        meta: {
-          provider: outcome.provider,
-          model: outcome.model,
-          sourceLang: request.sourceLang,
-          targetLang: request.targetLang,
-          detectedLang: outcome.detectedSourceLang,
-          tone: request.tone ?? settings.translationTone,
-          style: request.style,
-          romanized: outcome.romanized,
-        },
-        languages: [request.targetLang, ...(outcome.detectedSourceLang ? [outcome.detectedSourceLang] : [])],
-        chars: request.text.length,
-        saveHistory: settings.saveHistory,
-      });
+      await this.activity.record({ userId, client, type: 'translate', languages: [request.targetLang, ...(outcome.detectedSourceLang ? [outcome.detectedSourceLang] : [])], chars: request.text.length });
     } catch (err) {
-      console.warn('[verba] could not record history:', err instanceof Error ? err.message : err);
+      console.warn('[verba] could not record usage:', err instanceof Error ? err.message : err);
     }
 
     return {
@@ -156,43 +134,6 @@ export class TranslationService {
       provider: outcome.provider,
       model: outcome.model,
       latencyMs: outcome.latencyMs,
-      historyId,
-    };
-  }
-
-  async detect(userId: string, text: string, signal: AbortSignal): Promise<DetectLanguageResponse> {
-    const entries = (await this.registry.entries(userId))
-      .filter(
-        (entry) =>
-          entry.descriptor.kind === 'translation' && entry.ready && entry.descriptor.capabilities.includes('detect'),
-      )
-      .sort(byPriority);
-    if (entries.length === 0) {
-      throw notConfigured('No language detection provider is ready. Enable the AI model, or add a key for Azure or Google.');
-    }
-
-    const translators = this.registry.translators(userId);
-    const chain = await this.registry.runChain(userId, entries, {
-      chars: text.length,
-      signal,
-      run: async (entry, callSignal) => {
-        const translator = translators.get(entry.id);
-        if (!translator?.detect) {
-          throw new ProviderError(entry.id, `${entry.descriptor.name} cannot detect languages.`, 'config');
-        }
-        const out = await translator.detect(text, entry.cfg, callSignal);
-        const language = normalizeDetectedLanguage(out.language);
-        if (!language) throw new ProviderError(entry.id, `${entry.descriptor.name} returned no recognized language.`);
-        return { value: { language, confidence: out.confidence }, model: entry.cfg.model ?? undefined };
-      },
-    });
-
-    return {
-      language: chain.value.language,
-      confidence: chain.value.confidence,
-      provider: chain.provider,
-      model: chain.model,
-      latencyMs: chain.latencyMs,
     };
   }
 }

@@ -103,3 +103,50 @@ describe('POST /api/feedback as a normal user', () => {
     expect(last).toBe(429);
   });
 });
+
+describe('GET /api/admin/feedback', () => {
+  let h: Harness;
+
+  beforeEach(async () => {
+    h = await createHarness();
+  });
+
+  afterEach(async () => {
+    vi.unstubAllGlobals();
+    await h.close();
+  });
+
+  it('lets the admin read the messages with who wrote them, newest first', async () => {
+    const { id, token } = await createUserAccount(h.app, {});
+    const as = { Authorization: `Bearer ${token}` };
+    await request(h.app).post('/api/feedback').set(as).send({ message: 'first thought', category: 'idea' });
+    await request(h.app).post('/api/feedback').set(as).send({ message: 'it crashed', category: 'bug' });
+
+    const res = await request(h.app).get('/api/admin/feedback').set(AUTH);
+    expect(res.status).toBe(200);
+    expect(res.body.items.map((item: { message: string }) => item.message)).toEqual(['it crashed', 'first thought']);
+    const user = await h.storage.getUser(id);
+    expect(res.body.items[0]).toMatchObject({ category: 'bug', userName: user?.name, userEmail: user?.email });
+  });
+
+  it('shows no name for feedback from an account that no longer exists', async () => {
+    await h.storage.insertFeedback({
+      id: 'orphan',
+      userId: 'gone',
+      category: 'other',
+      message: 'left before the account was deleted',
+      client: 'extension',
+      version: null,
+      createdAt: new Date().toISOString(),
+    });
+    const res = await request(h.app).get('/api/admin/feedback').set(AUTH);
+    expect(res.body.items[0]).toMatchObject({ id: 'orphan', userName: null, userEmail: null });
+  });
+
+  it('is closed to normal accounts and to visitors', async () => {
+    const { token } = await createUserAccount(h.app, {});
+    expect((await request(h.app).get('/api/admin/feedback').set({ Authorization: `Bearer ${token}` })).status).toBe(403);
+    expect((await request(h.app).get('/api/admin/feedback')).status).toBe(401);
+    expect((await request(h.app).get('/api/admin/feedback').set({ 'X-Verba-Guest': 'a1b2c3d4-e5f6-7890-abcd-ef1234567890' })).status).toBe(401);
+  });
+});

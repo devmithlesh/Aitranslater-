@@ -41,10 +41,6 @@ export function cleanModelOutput(raw: string, input = ''): string {
   return out;
 }
 
-export function collapseWhitespace(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
 export function clip(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) : text;
 }

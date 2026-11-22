@@ -1,13 +1,11 @@
 import { z } from 'zod';
 import {
-  ACTIVITY_TYPES,
   EMAIL_MAX_LENGTH,
   FEEDBACK_CATEGORIES,
   FEEDBACK_MESSAGE_MAX_LENGTH,
   NAME_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
-  ASSISTANT_TOOLS,
   AUTO_LANGUAGE,
   HINGLISH,
   isExplainLanguage,
@@ -77,24 +75,6 @@ export const translateSchema = z.object({
   provider: z.enum(TRANSLATION_PROVIDER_IDS).optional(),
 });
 
-export const detectLanguageSchema = z.object({ text: textInput() });
-
-export const grammarSchema = z.object({
-  text: textInput(),
-  language: sourceLanguage.optional(),
-});
-
-export const rewriteSchema = z.object({
-  text: textInput(),
-  style: z.enum(REWRITE_STYLES),
-  customInstructions: z.string().trim().max(500).optional(),
-});
-
-export const summarizeSchema = z.object({
-  text: textInput(),
-  format: z.enum(SUMMARY_FORMATS).optional(),
-});
-
 /** "hinglish" or any supported language code; codes are canonicalized, "hinglish" is kept as-is. */
 export const explainSchema = z.object({
   text: textInput(),
@@ -104,14 +84,6 @@ export const explainSchema = z.object({
     .refine((value) => isExplainLanguage(value), { message: 'Unsupported explain language.' })
     .transform((value) => (value === HINGLISH ? value : canonicalCode(value)))
     .optional(),
-});
-
-export const smartReplySchema = z.object({
-  context: textInput(),
-  intent: z.string().trim().max(500).optional(),
-  style: z.enum(REPLY_STYLES),
-  length: z.enum(REPLY_LENGTHS),
-  count: z.number().int().min(1).max(3).optional(),
 });
 
 const writeImage = z.object({
@@ -154,26 +126,6 @@ export const replyVariantsSchema = z.object({
   styles: z.array(z.enum(REWRITE_STYLES)).min(1).max(MAX_VARIANT_STYLES).transform(unique).optional(),
 });
 
-export const assistantRunSchema = z
-  .object({
-    text: textInput(),
-    toolId: z.enum(ASSISTANT_TOOLS).optional(),
-    assistantId: z.string().trim().min(1).max(100).optional(),
-    prompt: z.string().trim().max(2000).optional(),
-    targetLang: targetLanguage.optional(),
-  })
-  .superRefine((value, ctx) => {
-    if (Boolean(value.toolId) === Boolean(value.assistantId)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'Provide exactly one of "toolId" or "assistantId".',
-      });
-    }
-    if (value.toolId === 'custom' && !value.prompt) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['prompt'], message: 'A custom prompt is required for toolId "custom".' });
-    }
-  });
-
 const assistantFields = {
   name: z.string().trim().min(1, 'Name is required.').max(60),
   description: z.string().trim().max(200).default(''),
@@ -184,19 +136,6 @@ const assistantFields = {
 
 export const assistantInputSchema = z.object(assistantFields);
 export const assistantPatchSchema = z.object(assistantFields).partial();
-
-export const historyQuerySchema = z.object({
-  type: z.enum(ACTIVITY_TYPES).optional(),
-  q: z.string().trim().max(200).optional(),
-  favorite: z
-    .enum(['true', 'false'])
-    .optional()
-    .transform((value) => (value === undefined ? undefined : value === 'true')),
-  limit: z.coerce.number().int().min(1).max(100).default(30),
-  cursor: z.string().max(200).optional(),
-});
-
-export const historyFavoriteSchema = z.object({ favorite: z.boolean() });
 
 const extensionUpdateSchema = z
   .object({
@@ -233,8 +172,6 @@ export const settingsUpdateSchema = z
     defaultReplyStyle: z.enum(REPLY_STYLES).optional(),
     defaultReplyLength: z.enum(REPLY_LENGTHS).optional(),
     defaultSummaryFormat: z.enum(SUMMARY_FORMATS).optional(),
-    saveHistory: z.boolean().optional(),
-    historyRetentionDays: z.number().int().min(0).max(3650).optional(),
     showPrivacyNotice: z.boolean().optional(),
     extension: extensionUpdateSchema.optional(),
     updatedAt: z.string().optional(),

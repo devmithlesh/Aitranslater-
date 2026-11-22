@@ -1,4 +1,5 @@
-import { ArrowLeft, ExternalLink, LogIn, LogOut, MessageSquarePlus, Settings } from 'lucide-react';
+import { GUIDE_PATH } from '@verba/shared';
+import { ArrowLeft, BookOpen, ExternalLink, LogIn, LogOut, MessageSquarePlus, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { connectionStatus, StatusDot } from '../components/ConnectionStatus';
 import { localError } from '../components/errors';
@@ -13,6 +14,7 @@ import { AuthPanel, type AuthMode } from './AuthPanel';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { ExplainSelectionCard } from './ExplainSelectionCard';
 import { GuestProvider } from './shared/guest';
+import { openShortcutSettings, useShortcuts } from './shared/useShortcuts';
 import { FeedbackPanel } from './feedback/FeedbackPanel';
 import { TranslatorView } from './translator/TranslatorView';
 import { WriteView } from './writer/WriteView';
@@ -27,9 +29,16 @@ export function Popup() {
   /** Signed-out visitors use the tools first; this swaps them for the sign-in form. */
   const [authOpen, setAuthOpen] = useState(false);
   const status = connectionStatus(state);
+  const shortcuts = useShortcuts();
 
   async function handleOpenDashboard() {
     const res = await openDashboard();
+    setNotice(res.ok ? null : res.error);
+  }
+
+  /** The how-to page (with the video) on the website. */
+  async function handleOpenGuide() {
+    const res = await openDashboard(GUIDE_PATH);
     setNotice(res.ok ? null : res.error);
   }
 
@@ -97,6 +106,7 @@ export function Popup() {
               />
             </>
           )}
+          <IconButton icon={BookOpen} label="How to use Verba" size="sm" onClick={() => void handleOpenGuide()} />
           <IconButton icon={Settings} label="Settings" size="sm" onClick={() => void handleOpenSettings()} />
         </div>
       </header>
@@ -161,8 +171,28 @@ export function Popup() {
       </div>
 
       <footer className="min-w-0 border-t border-border bg-surface px-3 py-2 text-[11px] leading-4 text-subtle">
-        <span className="font-medium text-muted">Alt+Shift+V</span> in any text box · select text, then{' '}
-        <span className="font-medium text-muted">right-click → Explain</span>
+        {/* Two short lines at most, each cut off with … if the window is narrow. */}
+        <p className="truncate">
+          {shortcuts.translateInPlace ? (
+            <>
+              <span className="font-medium text-muted">{shortcuts.translateInPlace}</span> translates what you typed
+            </>
+          ) : (
+            <>
+              Translate without opening Verba:{' '}
+              <button
+                type="button"
+                onClick={openShortcutSettings}
+                className="font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              >
+                set a shortcut
+              </button>
+            </>
+          )}
+        </p>
+        <p className="truncate">
+          <span className="font-medium text-muted">{shortcuts.openPopup}</span> opens Verba
+        </p>
       </footer>
     </div>
   );

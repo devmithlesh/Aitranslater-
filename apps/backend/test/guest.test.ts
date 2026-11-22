@@ -72,7 +72,7 @@ describe('guest access (5 free prompts a day without an account)', () => {
     for (const [method, path] of [
       ['get', '/api/me'],
       ['get', '/api/settings'],
-      ['get', '/api/history'],
+      ['get', '/api/stats'],
       ['post', '/api/feedback'],
       ['post', '/api/translate'],
       ['post', '/api/explain'],
@@ -89,11 +89,11 @@ describe('guest access (5 free prompts a day without an account)', () => {
     expect((await request(h.app).post('/api/write').send({ prompt: 'hi there' })).status).toBe(401);
   });
 
-  it('keeps no history for visitors', async () => {
+  it('keeps no history or usage rows for visitors', async () => {
     mockGemini();
     await request(h.app).post('/api/write').set(GUEST).send({ prompt: 'private question' });
-    const items = await h.storage.queryHistory(`guest:${GUEST['X-Verba-Guest']}`, { limit: 10, offset: 0 });
-    expect(items.total).toBe(0);
+    // Not even usage rows are kept under a visitor's id.
+    expect(await h.storage.getActivity(`guest:${GUEST['X-Verba-Guest']}`)).toBeUndefined();
   });
 
   it('can be switched off with GUEST_DAILY_LIMIT=0', async () => {

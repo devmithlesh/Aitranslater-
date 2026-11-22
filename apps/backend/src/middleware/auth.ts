@@ -28,9 +28,9 @@ export interface AuthContext {
 }
 
 /** Header a signed-out extension sends instead of a token: a random id it made for itself. */
-export const GUEST_HEADER = 'x-verba-guest';
+const GUEST_HEADER = 'x-verba-guest';
 const GUEST_ID_PATTERN = /^[A-Za-z0-9-]{16,64}$/;
-export const GUEST_ID_PREFIX = 'guest:';
+const GUEST_ID_PREFIX = 'guest:';
 
 /**
  * The address a guest is counted under. IPv4 as is. IPv6 by its first 64 bits (the /64 a single host controls),
@@ -50,7 +50,7 @@ export function ipGroup(ip: string): string {
     .join(':');
 }
 
-/** True for the ids guests act under. They never get history, settings or usage records. */
+/** True for the ids guests act under. They never get settings or usage records. */
 export function isGuestUserId(userId: string): boolean {
   return userId.startsWith(GUEST_ID_PREFIX);
 }
@@ -108,7 +108,7 @@ function matchesRule(rules: readonly RouteRule[], method: string, path: string):
 }
 
 /** Exact match on method and path. Anything not listed (including unknown routes) is denied to users. */
-export function isUserRoute(method: string, path: string): boolean {
+function isUserRoute(method: string, path: string): boolean {
   return matchesRule(USER_ROUTES, method, path);
 }
 

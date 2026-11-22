@@ -17,7 +17,7 @@ describe('settings', () => {
   it('returns defaults before anything is saved', async () => {
     const res = await request(h.app).get('/api/settings').set(AUTH);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ defaultTargetLang: DEFAULT_SETTINGS.defaultTargetLang, saveHistory: true });
+    expect(res.body).toMatchObject({ defaultTargetLang: DEFAULT_SETTINGS.defaultTargetLang });
     expect(res.body.extension.toolbarActions).toEqual(DEFAULT_SETTINGS.extension.toolbarActions);
   });
 
@@ -128,7 +128,7 @@ describe('extension and stats', () => {
     expect(res.status).toBe(200);
     expect(res.body.daily).toHaveLength(14);
     expect(res.body.totals.all).toBe(0);
-    expect(res.body.recent).toEqual([]);
+    expect(res.body.recent).toBeUndefined();
     expect(res.body.byClient).toEqual({ web: 0, extension: 0 });
   });
 });

@@ -39,10 +39,10 @@ const DEFAULT_ENABLED: Partial<Record<ProviderId, boolean>> = {
   'openai-compatible': false,
 };
 
-export const NO_LLM_MESSAGE =
+const NO_LLM_MESSAGE =
   'No AI model provider is ready. Add a Gemini, Groq or OpenRouter key, or enable Ollama.';
 
-export function defaultStoredConfig(descriptor: ProviderDescriptor): StoredProviderConfig {
+function defaultStoredConfig(descriptor: ProviderDescriptor): StoredProviderConfig {
   return {
     enabled: DEFAULT_ENABLED[descriptor.id] ?? true,
     priority: DEFAULT_PRIORITY[descriptor.id],
@@ -54,7 +54,7 @@ export function defaultStoredConfig(descriptor: ProviderDescriptor): StoredProvi
   };
 }
 
-export function findDescriptor(id: string): ProviderDescriptor | undefined {
+function findDescriptor(id: string): ProviderDescriptor | undefined {
   return PROVIDERS.find((descriptor) => descriptor.id === id);
 }
 

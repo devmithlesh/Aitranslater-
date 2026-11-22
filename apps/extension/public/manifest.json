@@ -59,6 +59,10 @@
     "_execute_action": {
       "suggested_key": { "default": "Alt+Shift+V" },
       "description": "Open Verba translator"
+    },
+    "translate-in-place": {
+      "suggested_key": { "default": "Alt+Shift+E" },
+      "description": "Translate the text you typed in the focused box"
     }
   }
 }

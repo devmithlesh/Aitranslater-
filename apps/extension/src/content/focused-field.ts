@@ -25,9 +25,9 @@ import {
 } from './input-handler';
 import { isActiveHere } from './state';
 
-export const NO_FIELD_REASON = 'Click into the text box you want to change, then try again.';
+const NO_FIELD_REASON = 'Click into the text box you want to change, then try again.';
 /** The popup appends the clipboard fallback note, so this only states what happened. */
-export const BLOCKED_REASON = 'This site blocked automatic insert.';
+const BLOCKED_REASON = 'This site blocked automatic insert.';
 
 /** Delays (ms) between checks while waiting for a rich editor to apply an insert. */
 const SETTLE_DELAYS_MS = [50, 100, 200] as const;
@@ -470,6 +470,15 @@ export function startFocusTracking(): void {
   }
 }
 
+/** True when the node sits inside a box the user types in (contenteditable, textarea or input). */
+function isInEditable(node: Node | null): boolean {
+  if (!node) return false;
+  const el = node.nodeType === Node.ELEMENT_NODE ? (node as Element) : node.parentElement;
+  if (!el) return false;
+  if (el instanceof HTMLElement && el.isContentEditable) return true;
+  return el.closest('textarea, input, [contenteditable]:not([contenteditable="false"])') !== null;
+}
+
 /**
  * The text the user highlighted in this frame. Inside an input/textarea the document selection is
  * empty, so the field's own selection range is used. Sensitive fields are never read.
@@ -481,19 +490,23 @@ export function readSelection(): SelectionInfo | null {
     const deepest = chain?.[chain.length - 1];
 
     let raw = '';
+    let inEditable = false;
     const field = deepest ? fieldOf(deepest) : null;
     if (deepest && isSensitiveTarget(deepest)) return null;
     if (field && field.selectionStart !== null && field.selectionEnd !== null) {
       raw = field.value.slice(field.selectionStart, field.selectionEnd);
+      // Text highlighted inside an <input> or <textarea> is the user's own typing.
+      inEditable = raw.trim() !== '';
     }
     if (!raw.trim()) {
       const sel = deepest ? selectionFor(deepest) : window.getSelection();
       raw = sel?.toString() ?? '';
+      inEditable = isInEditable(sel?.anchorNode ?? null);
     }
 
     const text = raw.trim();
     if (!text) return null;
-    return { text: text.slice(0, MAX_FIELD_TEXT), site: location.hostname };
+    return { text: text.slice(0, MAX_FIELD_TEXT), site: location.hostname, inEditable };
   } catch {
     return null;
   }

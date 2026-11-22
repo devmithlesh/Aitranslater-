@@ -1,4 +1,4 @@
-import { Activity, Languages, Monitor, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react';
+import { Activity, Languages, MessageSquareText, Monitor, Moon, Settings, Sun, Users, type LucideIcon } from 'lucide-react';
 import { Suspense } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { IconButton, Spinner } from '@/components/ui';
@@ -17,6 +17,7 @@ const ADMIN_LINKS: { to: string; label: string; icon: LucideIcon; end?: boolean 
   { to: '/', label: 'Translator', icon: Languages, end: true },
   { to: '/users', label: 'Users', icon: Users },
   { to: '/usage', label: 'API usage', icon: Activity },
+  { to: '/feedback', label: 'Feedback', icon: MessageSquareText },
 ];
 
 /** Single-page shell: slim top bar with brand, theme, role-aware navigation, provider settings and the account menu. */

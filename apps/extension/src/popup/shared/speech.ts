@@ -54,7 +54,7 @@ const SPEECH_LANGS: Record<string, string> = {
 };
 
 /** Speech recognition language for a Verba language code. Unknown codes are passed through. */
-export function toSpeechLang(code: string): string {
+function toSpeechLang(code: string): string {
   return SPEECH_LANGS[code] ?? code;
 }
 

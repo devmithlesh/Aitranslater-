@@ -14,5 +14,6 @@ export function createAdminRouter(services: Services): Router {
   router.get('/admin/config', ctrl.getConfig);
   router.put('/admin/config', ctrl.updateConfig);
   router.get('/admin/usage', ctrl.usage);
+  router.get('/admin/feedback', ctrl.feedback);
   return router;
 }

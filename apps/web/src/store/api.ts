@@ -7,8 +7,7 @@ import {
 } from '@reduxjs/toolkit/query/react';
 import {
   CLIENT_HEADER,
-  type AdminConfig,
-  type AdminConfigUpdate,
+  type AdminFeedbackResponse,
   type AdminUsageResponse,
   type ApiErrorBody,
   type AuthConfigResponse,
@@ -27,7 +26,6 @@ import {
   type SignupRequest,
   type TranslateVariantsRequest,
   type TranslateVariantsResponse,
-  type UpdateUserRequest,
   type UserListResponse,
   type UserPasswordResponse,
   type UserSettings,
@@ -108,7 +106,7 @@ export function errorMessage(error: unknown): string {
 export const api = createApi({
   reducerPath: 'api',
   baseQuery,
-  tagTypes: ['Settings', 'Providers', 'Me', 'Users', 'AdminConfig', 'AdminUsage'],
+  tagTypes: ['Settings', 'Providers', 'Me', 'Users', 'AdminUsage', 'AdminFeedback'],
   endpoints: (build) => ({
     // Translation runs are mutations: never cached, explicit user intent. They refresh provider usage,
     // the caller's remaining credits, and the admin's usage and per-user counters.
@@ -176,28 +174,14 @@ export const api = createApi({
       query: (body) => ({ url: '/admin/users', method: 'POST', body }),
       invalidatesTags: ['Users', 'AdminUsage'],
     }),
-    updateUser: build.mutation<UserView, { id: string; patch: UpdateUserRequest }>({
-      query: ({ id, patch }) => ({ url: `/admin/users/${id}`, method: 'PATCH', body: patch }),
-      invalidatesTags: ['Users'],
-    }),
-    /** Issues a temporary password (returned once) and signs the account out everywhere. */
-    resetUserPassword: build.mutation<UserPasswordResponse, string>({
-      query: (id) => ({ url: `/admin/users/${id}/reset-password`, method: 'POST' }),
-      invalidatesTags: ['Users'],
-    }),
     deleteUser: build.mutation<void, string>({
       query: (id) => ({ url: `/admin/users/${id}`, method: 'DELETE' }),
       invalidatesTags: ['Users', 'AdminUsage'],
     }),
 
-    // ── Admin: config and usage ─────────────────────────────────────
-    adminConfig: build.query<AdminConfig, void>({ query: () => '/admin/config', providesTags: ['AdminConfig'] }),
-    updateAdminConfig: build.mutation<AdminConfig, AdminConfigUpdate>({
-      query: (body) => ({ url: '/admin/config', method: 'PUT', body }),
-      // A default-limit change affects every user's effective limit and the caller's own credits.
-      invalidatesTags: ['AdminConfig', 'Users', 'Me', 'AdminUsage'],
-    }),
+    // ── Admin: usage and feedback ───────────────────────────────────
     adminUsage: build.query<AdminUsageResponse, void>({ query: () => '/admin/usage', providesTags: ['AdminUsage'] }),
+    adminFeedback: build.query<AdminFeedbackResponse, void>({ query: () => '/admin/feedback', providesTags: ['AdminFeedback'] }),
   }),
 });
 
@@ -217,10 +201,7 @@ export const {
   useCreateSessionMutation,
   useUsersQuery,
   useCreateUserMutation,
-  useUpdateUserMutation,
-  useResetUserPasswordMutation,
   useDeleteUserMutation,
-  useAdminConfigQuery,
-  useUpdateAdminConfigMutation,
   useAdminUsageQuery,
+  useAdminFeedbackQuery,
 } = api;

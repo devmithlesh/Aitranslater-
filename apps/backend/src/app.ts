@@ -15,7 +15,6 @@ import { createAuthRouter, createPublicAuthRouter } from './routes/auth.routes';
 import { createFeedbackRouter } from './routes/feedback.routes';
 import { createExtensionRouter } from './routes/extension.routes';
 import { createHealthRouter } from './routes/health.routes';
-import { createHistoryRouter } from './routes/history.routes';
 import { createProvidersRouter } from './routes/providers.routes';
 import { createSettingsRouter } from './routes/settings.routes';
 import { createStatsRouter } from './routes/stats.routes';
@@ -34,7 +33,7 @@ export interface AppDeps {
 const EXTENSION_PREFIX = 'chrome-extension://';
 
 /** Requests without an Origin (curl, server-to-server) are allowed; browsers are checked against the lists. */
-export function isOriginAllowed(origin: string | undefined, config: AppConfig): boolean {
+function isOriginAllowed(origin: string | undefined, config: AppConfig): boolean {
   if (!origin) return true;
   if (config.corsOrigins.includes(origin)) return true;
   if (!origin.startsWith(EXTENSION_PREFIX)) return false;
@@ -79,7 +78,6 @@ export function createApp(deps: AppDeps): Express {
   api.use(createAiRouter(services, limiters.ai));
   api.use(createFeedbackRouter(services, limiters.feedback));
   api.use(createAssistantsRouter(services));
-  api.use(createHistoryRouter(services));
   api.use(createSettingsRouter(services));
   api.use(createProvidersRouter(services));
   api.use(createStatsRouter(services));
