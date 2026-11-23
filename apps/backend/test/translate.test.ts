@@ -39,7 +39,7 @@ describe('translation routing', () => {
     const calledUrl = new URL(String(fetchMock.mock.calls[0][0]));
     expect(calledUrl.searchParams.get('langpair')).toBe('en|es');
     expect(calledUrl.searchParams.get('q')).toBe('Hello, how are you?');
-    expect(res.body.historyId).toEqual(expect.any(String));
+    expect(res.body.historyId).toBeUndefined();
   });
 
   it('uses Autodetect for an auto source language', async () => {
@@ -110,7 +110,7 @@ describe('translation routing', () => {
       .send({ text: 'Hello', sourceLang: 'en', targetLang: 'es', style: 'funny' });
     expect(res.status).toBe(503);
     expect(res.body.error.code).toBe('NO_PROVIDER_CONFIGURED');
-    expect(res.body.error.message).toContain('Styled translations need an AI model provider');
+    expect(res.body.error.message).toContain('Styled and Hinglish translations need an AI model provider');
   });
 
   it('routes a styled translation through the LLM with the style applied', async () => {

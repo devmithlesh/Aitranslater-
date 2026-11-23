@@ -4,6 +4,8 @@ import type { AppConfig } from '../config/env';
 
 const WINDOW_MS = 60_000;
 const AUTH_WINDOW_MS = 15 * 60_000;
+/** Feedback is free text saved forever, so it gets its own small budget, apart from the AI one. */
+const FEEDBACK_PER_MINUTE = 5;
 
 /**
  * Keyed by client IP (express-rate-limit's default, honouring TRUST_PROXY through req.ip). The token is
@@ -26,6 +28,8 @@ function limiter(limit: number, windowMs: number = WINDOW_MS): RequestHandler {
 export interface RateLimiters {
   general: RequestHandler;
   ai: RequestHandler;
+  /** Feedback submissions only. */
+  feedback: RequestHandler;
   /** Sign-in and sign-up routes. Stricter, over a 15-minute window. */
   auth: RequestHandler;
 }
@@ -34,6 +38,7 @@ export function createRateLimiters(config: AppConfig): RateLimiters {
   return {
     general: limiter(config.rateLimitPerMinute),
     ai: limiter(config.rateLimitAiPerMinute),
+    feedback: limiter(FEEDBACK_PER_MINUTE),
     auth: limiter(config.rateLimitAuthPer15Min, AUTH_WINDOW_MS),
   };
 }

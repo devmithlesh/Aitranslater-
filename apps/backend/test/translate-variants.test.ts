@@ -55,7 +55,7 @@ describe('POST /api/translate-variants', () => {
     expect(res.body.meaning).toBe('The speaker asks how the listener is doing.');
     expect(res.body.detectedSourceLang).toBe('hi');
     expect(res.body.romanized).toBe(true);
-    expect(res.body.historyId).toEqual(expect.any(String));
+    expect(res.body.historyId).toBeUndefined();
     expect(res.body.variants.map((v: { style: string }) => v.style)).toEqual(
       DEFAULT_STYLES.filter((style) => style !== 'polite'),
     );
@@ -217,7 +217,7 @@ describe('POST /api/translate-variants hardening', () => {
 
   it('drops a detected language the shared list does not know', async () => {
     mockFetch((url) =>
-      url.includes('generativelanguage.googleapis.com') ? variantsReply('Hinglish') : unexpectedUrl(url),
+      url.includes('generativelanguage.googleapis.com') ? variantsReply('Klingon') : unexpectedUrl(url),
     );
     const res = await request(h.app)
       .post('/api/translate-variants')
@@ -242,21 +242,6 @@ describe('POST /api/translate-variants hardening', () => {
           .maxOutputTokens,
     );
     expect(budgets).toEqual([4096, 16384]);
-  });
-
-  it('still returns 200 with no historyId when history recording fails', async () => {
-    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-    // Stub the storage instance this app uses (a prototype spy is fragile across parallel workers).
-    vi.spyOn(h.storage, 'insertHistory').mockRejectedValue(new Error('disk full'));
-    mockFetch((url) => (url.includes('generativelanguage.googleapis.com') ? variantsReply('en') : unexpectedUrl(url)));
-    const res = await request(h.app)
-      .post('/api/translate-variants')
-      .set(AUTH)
-      .send({ text: 'Hello', sourceLang: 'en', targetLang: 'es', styles: ['natural'] });
-    expect(res.status).toBe(200);
-    expect(res.body.historyId).toBeUndefined();
-    expect(res.body.variants).toEqual([{ style: 'natural', text: 'Hello.' }]);
-    expect(console.warn).toHaveBeenCalledWith('[verba] could not record history:', 'disk full');
   });
 
   it('still returns 200 when provider usage recording fails', async () => {

@@ -2,6 +2,7 @@ import { PROVIDERS } from '@verba/shared';
 import type { ProviderDescriptor, ProviderId, ProviderTestResponse, ProviderView } from '@verba/shared';
 import type { AppConfig } from '../config/env';
 import { createLlmProviders, createTranslationProviders } from '../providers';
+import { HttpError, isBusyStatus } from '../providers/http';
 import { ProviderError, ProviderTimeoutError, UnsupportedLanguageError } from '../providers/types';
 import type {
   GenerateInput,
@@ -39,10 +40,10 @@ const DEFAULT_ENABLED: Partial<Record<ProviderId, boolean>> = {
   'openai-compatible': false,
 };
 
-export const NO_LLM_MESSAGE =
+const NO_LLM_MESSAGE =
   'No AI model provider is ready. Add a Gemini, Groq or OpenRouter key, or enable Ollama.';
 
-export function defaultStoredConfig(descriptor: ProviderDescriptor): StoredProviderConfig {
+function defaultStoredConfig(descriptor: ProviderDescriptor): StoredProviderConfig {
   return {
     enabled: DEFAULT_ENABLED[descriptor.id] ?? true,
     priority: DEFAULT_PRIORITY[descriptor.id],
@@ -54,7 +55,7 @@ export function defaultStoredConfig(descriptor: ProviderDescriptor): StoredProvi
   };
 }
 
-export function findDescriptor(id: string): ProviderDescriptor | undefined {
+function findDescriptor(id: string): ProviderDescriptor | undefined {
   return PROVIDERS.find((descriptor) => descriptor.id === id);
 }
 
@@ -101,6 +102,8 @@ interface Failure {
   provider: ProviderId;
   message: string;
   timeout: boolean;
+  /** The provider said it is overloaded or rate limited (HTTP 429/503), even after retrying. */
+  busy?: boolean;
 }
 
 /** Provider configuration, readiness, the fallback chains and the connection test. */
@@ -219,7 +222,12 @@ export class ProviderRegistry {
           }),
         );
         await bookkeeping('error', () => this.recordError(userId, entry.descriptor, message));
-        failures.push({ provider: entry.id, message, timeout: err instanceof ProviderTimeoutError });
+        failures.push({
+          provider: entry.id,
+          message,
+          timeout: err instanceof ProviderTimeoutError,
+          busy: err instanceof HttpError && isBusyStatus(err.status),
+        });
         continue;
       }
 
@@ -243,6 +251,10 @@ export class ProviderRegistry {
     const details = failures.map(({ provider, message }) => ({ provider, message }));
     if (failures.every((failure) => failure.timeout)) {
       throw providerTimeout('Every provider timed out. Try again in a moment.', details);
+    }
+    if (failures.every((failure) => failure.busy)) {
+      // Not a setup problem: the AI service is overloaded. Say so, so nobody goes looking at the settings.
+      throw providerFailed('The AI service is busy right now. Please try again in a minute.', details);
     }
     throw providerFailed('Every provider failed for this request. Check the provider settings.', details);
   }

@@ -5,6 +5,7 @@ import { Button } from '../components/ui/Button';
 import { PENDING_EXPLAIN_KEY, cleanSelection, type PendingExplain } from '../shared/explain';
 import { readPageSelection, type PageSelection } from './translator/pageBridgeClient';
 import { ReplyPanel } from './reply/ReplyPanel';
+import { useGuest } from './shared/guest';
 
 const PREVIEW_CHARS = 140;
 
@@ -25,6 +26,7 @@ export function ExplainSelectionCard({ settings = null }: ExplainSelectionCardPr
   /** Set on the first open and kept mounted after that, so toggling does not request (and spend) new replies. */
   const [replyMounted, setReplyMounted] = useState(false);
   const replyId = useId();
+  const guest = useGuest();
 
   useEffect(() => {
     let alive = true;
@@ -37,6 +39,8 @@ export function ExplainSelectionCard({ settings = null }: ExplainSelectionCardPr
   }, []);
 
   if (!selection) return null;
+  // Text highlighted in the message box is the user's own: there is nothing to explain or reply to.
+  if (selection.info.inEditable) return null;
   const text = cleanSelection(selection.info.text);
   if (!text) return null;
   const preview = text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS).trimEnd()}…` : text;
@@ -56,21 +60,24 @@ export function ExplainSelectionCard({ settings = null }: ExplainSelectionCardPr
   return (
     <section
       aria-label="Explain selected text"
-      className="min-w-0 space-y-2 rounded-xl border border-brand/30 bg-brand-soft p-3 animate-fade-in"
+      className="min-w-0 space-y-4 rounded-2xl border border-brand/30 bg-brand-soft p-4 animate-fade-in"
     >
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-subtle">You selected</p>
-      <p className="line-clamp-3 break-words text-[12.5px] leading-5 text-fg">{preview}</p>
-      <div className="grid grid-cols-2 gap-2">
+      <div className="space-y-2">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-subtle">You selected</p>
+        <p className="line-clamp-3 break-words rounded-xl bg-surface/70 px-3 py-2.5 text-[13px] leading-5 text-fg">
+          {preview}
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <Button
-          size="sm"
           icon={Lightbulb}
           fullWidth
-          onClick={() => explain(selection.tabId, text, selection.info.site)}
+          // Explain needs an account; for a visitor the button leads to sign-in instead of failing.
+          onClick={() => (guest.isGuest ? guest.openAuth('signin') : explain(selection.tabId, text, selection.info.site))}
         >
           Explain
         </Button>
         <Button
-          size="sm"
           variant="outline"
           icon={MessageSquareReply}
           fullWidth
@@ -86,8 +93,8 @@ export function ExplainSelectionCard({ settings = null }: ExplainSelectionCardPr
       </div>
       {failed && <p className="text-[12px] text-danger">Could not open the side panel. Try right-click → Explain with Verba.</p>}
       {replyMounted && (
-        <div id={replyId} hidden={!replyOpen} className="min-w-0 rounded-xl bg-surface p-3 shadow-card">
-          <ReplyPanel message={text} settings={settings} />
+        <div id={replyId} hidden={!replyOpen} className="min-w-0 rounded-xl bg-surface p-4 shadow-card">
+          <ReplyPanel message={text} settings={settings} open={replyOpen} />
         </div>
       )}
     </section>

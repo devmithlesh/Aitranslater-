@@ -60,22 +60,5 @@ export function createLibreTranslateProvider(http: HttpOptions): TranslationProv
         detectedSourceLang: detectedCode ? fromLibre(detectedCode) : undefined,
       };
     },
-    async detect(text, cfg, signal) {
-      const base = requireBaseUrl(cfg);
-      const data = await requestJson({
-        provider: PROVIDER,
-        url: `${base}/detect`,
-        body: { q: text, ...authFields(cfg) },
-        signal,
-        timeoutMs: http.timeoutMs,
-        redact: redactList(cfg),
-      });
-      const first: unknown = Array.isArray(data) ? data[0] : undefined;
-      if (!isRecord(first) || typeof first.language !== 'string') {
-        throw new ProviderError(PROVIDER, 'LibreTranslate returned no language detection.');
-      }
-      const confidence = typeof first.confidence === 'number' ? first.confidence / 100 : undefined;
-      return { language: fromLibre(first.language), confidence };
-    },
   };
 }

@@ -12,9 +12,9 @@ import { createAdminRouter } from './routes/admin.routes';
 import { createAiRouter } from './routes/ai.routes';
 import { createAssistantsRouter } from './routes/assistants.routes';
 import { createAuthRouter, createPublicAuthRouter } from './routes/auth.routes';
+import { createFeedbackRouter } from './routes/feedback.routes';
 import { createExtensionRouter } from './routes/extension.routes';
 import { createHealthRouter } from './routes/health.routes';
-import { createHistoryRouter } from './routes/history.routes';
 import { createProvidersRouter } from './routes/providers.routes';
 import { createSettingsRouter } from './routes/settings.routes';
 import { createStatsRouter } from './routes/stats.routes';
@@ -33,7 +33,7 @@ export interface AppDeps {
 const EXTENSION_PREFIX = 'chrome-extension://';
 
 /** Requests without an Origin (curl, server-to-server) are allowed; browsers are checked against the lists. */
-export function isOriginAllowed(origin: string | undefined, config: AppConfig): boolean {
+function isOriginAllowed(origin: string | undefined, config: AppConfig): boolean {
   if (!origin) return true;
   if (config.corsOrigins.includes(origin)) return true;
   if (!origin.startsWith(EXTENSION_PREFIX)) return false;
@@ -47,7 +47,7 @@ function corsOptions(config: AppConfig): CorsOptions {
   return {
     origin: (origin, callback) => callback(null, isOriginAllowed(origin, config)),
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Authorization', 'Content-Type', CLIENT_HEADER],
+    allowedHeaders: ['Authorization', 'Content-Type', CLIENT_HEADER, 'X-Verba-Guest'],
   };
 }
 
@@ -64,18 +64,20 @@ export function createApp(deps: AppDeps): Express {
   // Cross-origin must be allowed so the dashboard and extension can read responses.
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors(corsOptions(config)));
-  app.use(express.json({ limit: '64kb' }));
+  // Everything is small JSON, except /api/write, which may carry pictures: it gets a larger parser after login.
+  const smallJson = express.json({ limit: '64kb' });
+  app.use((req, res, next) => (req.path === '/api/write' ? next() : smallJson(req, res, next)));
 
   const api = express.Router();
   api.use(limiters.general);
   api.use(createHealthRouter(storage.kind));
   api.use(createPublicAuthRouter(services, limiters.auth));
-  api.use(createAuthMiddleware({ adminToken: deps.accessToken, storage, now: deps.now }));
+  api.use(createAuthMiddleware({ adminToken: deps.accessToken, storage, now: deps.now, guestEnabled: config.guestDailyLimit > 0 }));
   api.use(createAuthRouter(services));
   api.use(createAdminRouter(services));
   api.use(createAiRouter(services, limiters.ai));
+  api.use(createFeedbackRouter(services, limiters.feedback));
   api.use(createAssistantsRouter(services));
-  api.use(createHistoryRouter(services));
   api.use(createSettingsRouter(services));
   api.use(createProvidersRouter(services));
   api.use(createStatsRouter(services));

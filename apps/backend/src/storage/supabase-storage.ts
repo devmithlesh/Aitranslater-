@@ -1,15 +1,14 @@
 import { createClient } from '@supabase/supabase-js';
 import type { SupabaseClient, SupabaseClientOptions } from '@supabase/supabase-js';
 import { z } from 'zod';
-import { ACTIVITY_TYPES, type CustomAssistant, type HistoryItem, type UserSettings } from '@verba/shared';
+import { FEEDBACK_CATEGORIES, type CustomAssistant, type UserSettings } from '@verba/shared';
 import { LOCAL_USER_ID } from '../middleware/auth';
 import { pruneCreditDays } from './file-storage';
 import type {
   ActivityAggregates,
   CreditLedger,
   ExtensionStatusRecord,
-  HistoryFilter,
-  HistoryPage,
+  FeedbackRecord,
   ProviderUsageRecord,
   Storage,
   StoredAppConfig,
@@ -23,36 +22,6 @@ import type {
  * enabled without public policies (see supabase/schema.sql). jsonb payloads are
  * written by this process, so they are read back with a type assertion.
  */
-
-const historyRowSchema = z.object({
-  id: z.string(),
-  type: z.enum(ACTIVITY_TYPES),
-  favorite: z.boolean(),
-  input: z.string(),
-  output: z.string(),
-  meta: z.record(z.unknown()),
-  client: z.enum(['web', 'extension']),
-  created_at: z.string(),
-});
-
-type HistoryRow = z.infer<typeof historyRowSchema>;
-
-function toHistoryItem(row: HistoryRow): HistoryItem {
-  return {
-    id: row.id,
-    type: row.type,
-    input: row.input,
-    output: row.output,
-    meta: row.meta as HistoryItem['meta'],
-    client: row.client,
-    favorite: row.favorite,
-    createdAt: row.created_at,
-  };
-}
-
-function escapeIlikeValue(value: string): string {
-  return value.replace(/\*/g, '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-}
 
 function assertNoError(error: { message: string } | null, operation: string): void {
   if (error) throw new Error(`Supabase ${operation} failed: ${error.message}`);
@@ -68,12 +37,12 @@ const APP_CONFIG_ROW_ID = 'global';
 const USER_SCOPED_TABLES = [
   'user_settings',
   'custom_assistants',
-  'history_items',
   'provider_configs',
   'usage_stats',
   'activity_stats',
   'extension_status',
   'credit_ledgers',
+  'feedback',
   'app_sessions',
 ] as const;
 
@@ -108,6 +77,16 @@ const appConfigRowSchema = z.object({
   default_daily_limit: z.number().nullable(),
   provider_daily_quotas: z.record(z.number()),
   signups_enabled: z.boolean(),
+});
+
+const feedbackRowSchema = z.object({
+  id: z.string(),
+  user_id: z.string(),
+  category: z.enum(FEEDBACK_CATEGORIES),
+  message: z.string(),
+  client: z.enum(['web', 'extension']),
+  version: z.string().nullable(),
+  created_at: z.string(),
 });
 
 const creditRowSchema = z.object({
@@ -274,82 +253,6 @@ export class SupabaseStorage implements Storage {
       .select('id');
     assertNoError(error, 'deleteAssistant');
     return (data ?? []).length > 0;
-  }
-
-  async insertHistory(userId: string, item: HistoryItem): Promise<void> {
-    const { error } = await this.client.from('history_items').insert({
-      id: item.id,
-      user_id: userId,
-      type: item.type,
-      favorite: item.favorite,
-      input: item.input,
-      output: item.output,
-      meta: item.meta,
-      client: item.client,
-      created_at: item.createdAt,
-    });
-    assertNoError(error, 'insertHistory');
-  }
-
-  async queryHistory(userId: string, filter: HistoryFilter): Promise<HistoryPage> {
-    let query = this.client
-      .from('history_items')
-      .select('*', { count: 'exact' })
-      .eq('user_id', userId);
-    if (filter.type) query = query.eq('type', filter.type);
-    if (filter.favorite !== undefined) query = query.eq('favorite', filter.favorite);
-    if (filter.q) {
-      const pattern = `*${escapeIlikeValue(filter.q)}*`;
-      query = query.or(`input.ilike."${pattern}",output.ilike."${pattern}"`);
-    }
-    const { data, error, count } = await query
-      .order('created_at', { ascending: false })
-      .range(filter.offset, filter.offset + filter.limit - 1);
-    assertNoError(error, 'queryHistory');
-    const rows = z.array(historyRowSchema).parse(data ?? []);
-    return { items: rows.map(toHistoryItem), total: count ?? rows.length };
-  }
-
-  async setHistoryFavorite(userId: string, id: string, favorite: boolean): Promise<HistoryItem | undefined> {
-    const { data, error } = await this.client
-      .from('history_items')
-      .update({ favorite })
-      .eq('user_id', userId)
-      .eq('id', id)
-      .select('*');
-    assertNoError(error, 'setHistoryFavorite');
-    const rows = z.array(historyRowSchema).parse(data ?? []);
-    const row = rows[0];
-    return row ? toHistoryItem(row) : undefined;
-  }
-
-  async deleteHistoryItem(userId: string, id: string): Promise<boolean> {
-    const { data, error } = await this.client
-      .from('history_items')
-      .delete()
-      .eq('user_id', userId)
-      .eq('id', id)
-      .select('id');
-    assertNoError(error, 'deleteHistoryItem');
-    return (data ?? []).length > 0;
-  }
-
-  async clearHistory(userId: string): Promise<number> {
-    const { data, error } = await this.client.from('history_items').delete().eq('user_id', userId).select('id');
-    assertNoError(error, 'clearHistory');
-    return (data ?? []).length;
-  }
-
-  async pruneHistory(userId: string, beforeIso: string): Promise<number> {
-    const { data, error } = await this.client
-      .from('history_items')
-      .delete()
-      .eq('user_id', userId)
-      .eq('favorite', false)
-      .lt('created_at', beforeIso)
-      .select('id');
-    assertNoError(error, 'pruneHistory');
-    return (data ?? []).length;
   }
 
   async getProviderConfigs(userId: string): Promise<Partial<Record<string, StoredProviderConfig>>> {
@@ -531,6 +434,37 @@ export class SupabaseStorage implements Storage {
       signups_enabled: config.signupsEnabled ?? true,
     });
     assertNoError(error, 'saveAppConfig');
+  }
+
+  async insertFeedback(item: FeedbackRecord): Promise<void> {
+    const { error } = await this.client.from('feedback').insert({
+      id: item.id,
+      user_id: item.userId,
+      category: item.category,
+      message: item.message,
+      client: item.client,
+      version: item.version,
+      created_at: item.createdAt,
+    });
+    assertNoError(error, 'insertFeedback');
+  }
+
+  async listFeedback(limit: number): Promise<FeedbackRecord[]> {
+    const { data, error } = await this.client
+      .from('feedback')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    assertNoError(error, 'listFeedback');
+    return (data ?? []).map((row) => feedbackRowSchema.parse(row)).map((row) => ({
+      id: row.id,
+      userId: row.user_id,
+      category: row.category,
+      message: row.message,
+      client: row.client,
+      version: row.version,
+      createdAt: new Date(row.created_at).toISOString(),
+    }));
   }
 
   async getCredits(userId: string): Promise<CreditLedger | undefined> {

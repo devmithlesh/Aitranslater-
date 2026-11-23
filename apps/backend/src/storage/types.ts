@@ -1,4 +1,4 @@
-import type { ActivityType, ClientKind, CustomAssistant, HistoryItem, UserSettings } from '@verba/shared';
+import type { ActivityType, ClientKind, CustomAssistant, FeedbackCategory, UserSettings } from '@verba/shared';
 
 export interface StoredProviderConfig {
   enabled: boolean;
@@ -75,7 +75,7 @@ export interface ProviderUsageRecord {
   lastUsedAt: string | null;
 }
 
-/** Aggregates kept regardless of the saveHistory setting. */
+/** Aggregates only: counts, never the text people send. */
 export interface ActivityAggregates {
   totals: Record<ActivityType, number>;
   daily: Record<string, Partial<Record<ActivityType, number>>>;
@@ -84,23 +84,23 @@ export interface ActivityAggregates {
   charsProcessed: number;
 }
 
+/** Product feedback sent from the extension. Deleted together with the account, since the text can hold personal details. */
+export interface FeedbackRecord {
+  id: string;
+  userId: string;
+  category: FeedbackCategory;
+  message: string;
+  client: ClientKind;
+  /** Extension version, when sent from the extension. */
+  version: string | null;
+  createdAt: string;
+}
+
 export interface ExtensionStatusRecord {
   lastSeenAt: string;
   version: string;
 }
 
-export interface HistoryFilter {
-  type?: ActivityType;
-  q?: string;
-  favorite?: boolean;
-  offset: number;
-  limit: number;
-}
-
-export interface HistoryPage {
-  items: HistoryItem[];
-  total: number;
-}
 
 /**
  * Persistence boundary. Every method is keyed by userId (currently always "local").
@@ -120,14 +120,6 @@ export interface Storage {
   getAssistant(userId: string, id: string): Promise<CustomAssistant | undefined>;
   saveAssistant(userId: string, assistant: CustomAssistant): Promise<void>;
   deleteAssistant(userId: string, id: string): Promise<boolean>;
-
-  insertHistory(userId: string, item: HistoryItem): Promise<void>;
-  queryHistory(userId: string, filter: HistoryFilter): Promise<HistoryPage>;
-  setHistoryFavorite(userId: string, id: string, favorite: boolean): Promise<HistoryItem | undefined>;
-  deleteHistoryItem(userId: string, id: string): Promise<boolean>;
-  clearHistory(userId: string): Promise<number>;
-  /** Deletes non-favorite items created before `beforeIso`. Returns the number removed. */
-  pruneHistory(userId: string, beforeIso: string): Promise<number>;
 
   getProviderConfigs(userId: string): Promise<Partial<Record<string, StoredProviderConfig>>>;
   saveProviderConfig(userId: string, providerId: string, config: StoredProviderConfig): Promise<void>;
@@ -149,7 +141,7 @@ export interface Storage {
   findUserByGoogleSub(googleSub: string): Promise<StoredUser | undefined>;
   /** Insert or replace by id. Callers guarantee email uniqueness (Supabase also enforces it). */
   saveUser(user: StoredUser): Promise<void>;
-  /** Removes the user AND all data stored under that userId (settings, assistants, history, usage, activity, extension status, credits, sessions). */
+  /** Removes the user AND all data stored under that userId (settings, assistants, usage, activity, extension status, credits, sessions). */
   deleteUser(id: string): Promise<boolean>;
 
   saveSession(session: StoredSession): Promise<void>;
@@ -162,6 +154,10 @@ export interface Storage {
 
   getAppConfig(): Promise<StoredAppConfig | undefined>;
   saveAppConfig(config: StoredAppConfig): Promise<void>;
+
+  /** Newest first. */
+  insertFeedback(item: FeedbackRecord): Promise<void>;
+  listFeedback(limit: number): Promise<FeedbackRecord[]>;
 
   getCredits(userId: string): Promise<CreditLedger | undefined>;
   saveCredits(userId: string, ledger: CreditLedger): Promise<void>;

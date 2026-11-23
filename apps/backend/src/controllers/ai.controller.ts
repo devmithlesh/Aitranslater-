@@ -1,13 +1,6 @@
-import type { AssistantRunRequest } from '@verba/shared';
 import {
-  assistantRunSchema,
-  detectLanguageSchema,
   explainSchema,
-  grammarSchema,
   replyVariantsSchema,
-  rewriteSchema,
-  smartReplySchema,
-  summarizeSchema,
   translateSchema,
   translateVariantsSchema,
   writeSchema,
@@ -39,6 +32,11 @@ export function createAiController(services: Services) {
   }
 
   return {
+    /** Free prompts left for a visitor without an account. */
+    guestCredits: asyncHandler(async (_req, res) => {
+      res.json({ credits: await services.credits.status(getAuth(res)) });
+    }),
+
     translate: asyncHandler(async (req, res) => {
       const request = parseOrThrow(translateSchema, req.body);
       const result = await services.translation.translate({
@@ -50,43 +48,10 @@ export function createAiController(services: Services) {
       res.json(result);
     }),
 
-    detectLanguage: asyncHandler(async (req, res) => {
-      const { text } = parseOrThrow(detectLanguageSchema, req.body);
-      res.json(await services.translation.detect(LOCAL_USER_ID, text, requestSignal(res)));
-    }),
-
-    grammar: asyncHandler(async (req, res) => {
-      const request = parseOrThrow(grammarSchema, req.body);
-      res.json(
-        await services.ai.grammar({ userId: LOCAL_USER_ID, client: getClientKind(req), request, signal: requestSignal(res) }),
-      );
-    }),
-
-    rewrite: asyncHandler(async (req, res) => {
-      const request = parseOrThrow(rewriteSchema, req.body);
-      res.json(
-        await services.ai.rewrite({ userId: LOCAL_USER_ID, client: getClientKind(req), request, signal: requestSignal(res) }),
-      );
-    }),
-
-    summarize: asyncHandler(async (req, res) => {
-      const request = parseOrThrow(summarizeSchema, req.body);
-      res.json(
-        await services.ai.summarize({ userId: LOCAL_USER_ID, client: getClientKind(req), request, signal: requestSignal(res) }),
-      );
-    }),
-
     explain: asyncHandler(async (req, res) => {
       const request = parseOrThrow(explainSchema, req.body);
       res.json(
         await services.ai.explain({ userId: LOCAL_USER_ID, client: getClientKind(req), request, signal: requestSignal(res) }),
-      );
-    }),
-
-    smartReply: asyncHandler(async (req, res) => {
-      const request = parseOrThrow(smartReplySchema, req.body);
-      res.json(
-        await services.ai.smartReply({ userId: LOCAL_USER_ID, client: getClientKind(req), request, signal: requestSignal(res) }),
       );
     }),
 
@@ -127,13 +92,6 @@ export function createAiController(services: Services) {
         await withCredit(auth, () =>
           services.ai.write({ userId: auth.userId, client: getClientKind(req), request, signal: requestSignal(res) }),
         ),
-      );
-    }),
-
-    assistant: asyncHandler(async (req, res) => {
-      const request: AssistantRunRequest = parseOrThrow(assistantRunSchema, req.body);
-      res.json(
-        await services.ai.runAssistant({ userId: LOCAL_USER_ID, client: getClientKind(req), request, signal: requestSignal(res) }),
       );
     }),
   };

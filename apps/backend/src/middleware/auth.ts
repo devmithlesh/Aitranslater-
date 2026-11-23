@@ -3,7 +3,7 @@ import type { Request, RequestHandler, Response } from 'express';
 import type { UserRole } from '@verba/shared';
 import type { Storage, StoredUser } from '../storage/types';
 import { SessionsService } from '../services/sessions.service';
-import { sha256 } from '../utils/crypto';
+import { sha256, sha256Hex } from '../utils/crypto';
 import { forbidden, unauthorized } from '../utils/errors';
 
 /** The server's own token acts as "local". Every other caller is a stored account. */
@@ -23,12 +23,44 @@ export interface AuthContext {
   user: StoredUser | null;
   /** True when the caller used VERBA_ACCESS_TOKEN rather than a session. */
   serverToken: boolean;
+  /** Set for a visitor who is not signed in. `ipKey` is the shared per-IP counter id. */
+  guest?: { ipKey: string };
+}
+
+/** Header a signed-out extension sends instead of a token: a random id it made for itself. */
+const GUEST_HEADER = 'x-verba-guest';
+const GUEST_ID_PATTERN = /^[A-Za-z0-9-]{16,64}$/;
+const GUEST_ID_PREFIX = 'guest:';
+
+/**
+ * The address a guest is counted under. IPv4 as is. IPv6 by its first 64 bits (the /64 a single host controls),
+ * because one machine can use millions of addresses inside it.
+ */
+export function ipGroup(ip: string): string {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped?.[1]) return mapped[1];
+  if (!ip.includes(':')) return ip;
+  const [head = '', tail = ''] = ip.split('::');
+  const first = head ? head.split(':') : [];
+  const last = tail ? tail.split(':') : [];
+  const groups = ip.includes('::') ? [...first, ...Array<string>(Math.max(0, 8 - first.length - last.length)).fill('0'), ...last] : first;
+  return groups
+    .slice(0, 4)
+    .map((group) => group.toLowerCase().padStart(4, '0'))
+    .join(':');
+}
+
+/** True for the ids guests act under. They never get settings or usage records. */
+export function isGuestUserId(userId: string): boolean {
+  return userId.startsWith(GUEST_ID_PREFIX);
 }
 
 export interface AuthDeps {
   adminToken: string;
   storage: Storage;
   now?: () => Date;
+  /** Let signed-out visitors use the few routes in GUEST_ROUTES. */
+  guestEnabled?: boolean;
 }
 
 interface RouteRule {
@@ -46,10 +78,19 @@ const USER_ROUTES: readonly RouteRule[] = [
   { method: 'POST', path: '/translate-variants' },
   { method: 'POST', path: '/write' },
   { method: 'POST', path: '/reply-variants' },
+  { method: 'POST', path: '/feedback' },
   { method: 'GET', path: '/settings' },
   { method: 'PUT', path: '/settings' },
   { method: 'GET', path: '/assistants' },
   { method: 'POST', path: '/extension/heartbeat' },
+];
+
+/** The only routes a visitor without an account may call. Each costs one of their free daily prompts. */
+const GUEST_ROUTES: readonly RouteRule[] = [
+  { method: 'POST', path: '/translate-variants' },
+  { method: 'POST', path: '/write' },
+  { method: 'POST', path: '/reply-variants' },
+  { method: 'GET', path: '/guest/credits' },
 ];
 
 /** Routes that still work while an admin reset requires a new password. */
@@ -67,7 +108,7 @@ function matchesRule(rules: readonly RouteRule[], method: string, path: string):
 }
 
 /** Exact match on method and path. Anything not listed (including unknown routes) is denied to users. */
-export function isUserRoute(method: string, path: string): boolean {
+function isUserRoute(method: string, path: string): boolean {
   return matchesRule(USER_ROUTES, method, path);
 }
 
@@ -87,13 +128,30 @@ function bearerToken(req: Request): string {
  * Resolves `Authorization: Bearer <token>` to the server token or a session. The server token is compared
  * as SHA-256 digests in constant time. Session tokens are looked up by their stored digest.
  */
-export function createAuthMiddleware({ adminToken, storage, now = () => new Date() }: AuthDeps): RequestHandler {
+export function createAuthMiddleware({ adminToken, storage, now = () => new Date(), guestEnabled = false }: AuthDeps): RequestHandler {
   const adminDigest = sha256(adminToken);
   const sessions = new SessionsService(storage, now);
 
   async function resolve(req: Request): Promise<AuthContext> {
     const token = bearerToken(req);
-    if (!token) throw unauthorized();
+    if (!token) {
+      // No token at all: a visitor. Only allowed on the guest routes, and only with a well-formed install id.
+      const header = req.headers[GUEST_HEADER];
+      const guestId = typeof header === 'string' ? header.trim() : '';
+      if (!guestEnabled || !GUEST_ID_PATTERN.test(guestId) || !matchesRule(GUEST_ROUTES, req.method, req.path)) {
+        throw unauthorized();
+      }
+      return {
+        userId: `${GUEST_ID_PREFIX}${guestId}`,
+        role: 'user',
+        name: 'Guest',
+        email: null,
+        sessionId: null,
+        user: null,
+        serverToken: false,
+        guest: { ipKey: `guestip:${sha256Hex(ipGroup(req.ip ?? 'unknown')).slice(0, 32)}` },
+      };
+    }
 
     if (timingSafeEqual(sha256(token), adminDigest)) {
       return {
@@ -126,7 +184,7 @@ export function createAuthMiddleware({ adminToken, storage, now = () => new Date
   return (req, res, next) => {
     void resolve(req).then(
       (auth) => {
-        if (auth.role === 'user' && !isUserRoute(req.method, req.path)) {
+        if (auth.role === 'user' && !auth.guest && !isUserRoute(req.method, req.path)) {
           next(forbidden('Only the admin can do that.'));
           return;
         }

@@ -26,20 +26,21 @@ export interface TranslateOutput {
   model?: string;
 }
 
-export interface DetectOutput {
-  language: string;
-  confidence?: number;
-}
-
 export interface TranslationProvider {
   readonly id: TranslationProviderId;
   translate(input: TranslateInput, cfg: ResolvedProviderConfig): Promise<TranslateOutput>;
-  detect?(text: string, cfg: ResolvedProviderConfig, signal: AbortSignal): Promise<DetectOutput>;
+}
+
+/** A picture the model should look at (base64, no data: prefix). */
+export interface GenerateImage {
+  mimeType: string;
+  data: string;
 }
 
 export interface GenerateInput {
   system: string;
   prompt: string;
+  images?: GenerateImage[];
   json?: boolean;
   temperature?: number;
   maxTokens?: number;

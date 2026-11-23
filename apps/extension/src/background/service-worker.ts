@@ -9,6 +9,8 @@ import { handleRequest } from './router';
 import { handleExternalRequest } from './external';
 import { runScheduledSync } from './sync';
 import { handleExplainClick, registerExplainMenu } from './explain-menu';
+import { translateInPlace } from './in-place';
+import { DEFAULT_DASHBOARD_URL } from '../shared/messages';
 
 const SYNC_ALARM = 'verba-sync';
 const SYNC_PERIOD_MINUTES = 15;
@@ -30,7 +32,14 @@ chrome.runtime.onMessageExternal.addListener((message: unknown, sender, sendResp
 
 chrome.contextMenus.onClicked.addListener(handleExplainClick);
 
-chrome.runtime.onInstalled.addListener(() => {
+// The keyboard shortcut that translates the text typed in the focused box. Alt+Shift+V (open the popup) is handled by Chrome itself.
+chrome.commands.onCommand.addListener((command, tab) => {
+  if (command === 'translate-in-place') void translateInPlace(tab);
+});
+
+chrome.runtime.onInstalled.addListener((details) => {
+  // First install only: open the welcome page, so a new user sees what Verba does and how to start.
+  if (details.reason === 'install') void chrome.tabs.create({ url: DEFAULT_DASHBOARD_URL }).catch(() => undefined);
   ensureAlarm();
   registerExplainMenu();
   void runScheduledSync();

@@ -16,16 +16,6 @@ export function parseHttpUrl(value: string): string | null {
   }
 }
 
-/** Loopback servers never need an extra host permission (manifest already grants localhost). */
-export function isLocalUrl(value: string): boolean {
-  try {
-    const { hostname } = new URL(value);
-    return hostname === 'localhost' || hostname === '127.0.0.1';
-  } catch {
-    return false;
-  }
-}
-
 /**
  * Accepts "bank.example.com", "localhost" or an IPv4 address, and also
  * full URLs (their hostname is used). Returns null for anything else.

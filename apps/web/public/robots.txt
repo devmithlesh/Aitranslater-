@@ -4,6 +4,7 @@ Allow: /$
 Allow: /login
 Allow: /signup
 Allow: /privacy
+Allow: /guide
 Allow: /assets/
 Allow: /favicon.svg
 Allow: /og-image.png

@@ -48,7 +48,7 @@ describe('POST /api/reply-variants', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.provider).toBe('gemini');
-    expect(res.body.historyId).toEqual(expect.any(String));
+    expect(res.body.historyId).toBeUndefined();
     expect(res.body.variants).toEqual([
       { style: 'polite', text: 'Yes sir, I have had my tea already.' },
       { style: 'casual', text: 'Yep, had my chai.' },

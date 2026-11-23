@@ -28,14 +28,6 @@ function endpoint(path: string, key: string): string {
   return url.toString();
 }
 
-function firstDetectedLanguage(data: unknown): { language: string; confidence?: number } | undefined {
-  const detections = isRecord(data) && isRecord(data.data) ? data.data.detections : undefined;
-  const first = Array.isArray(detections) && Array.isArray(detections[0]) ? detections[0][0] : undefined;
-  if (!isRecord(first) || typeof first.language !== 'string') return undefined;
-  const confidence = typeof first.confidence === 'number' ? first.confidence : undefined;
-  return { language: first.language, confidence };
-}
-
 export function createGoogleProvider(http: HttpOptions): TranslationProvider {
   return {
     id: PROVIDER,
@@ -65,20 +57,6 @@ export function createGoogleProvider(http: HttpOptions): TranslationProvider {
         text: first.translatedText,
         detectedSourceLang: detected ? normalizeLanguage(detected) : undefined,
       };
-    },
-    async detect(text, cfg, signal) {
-      const key = requireKey(cfg);
-      const data = await requestJson({
-        provider: PROVIDER,
-        url: endpoint('/language/translate/v2/detect', key),
-        body: { q: text },
-        signal,
-        timeoutMs: http.timeoutMs,
-        redact: [key],
-      });
-      const detected = firstDetectedLanguage(data);
-      if (!detected) throw new ProviderError(PROVIDER, 'Google Cloud Translation returned no language detection.');
-      return { language: normalizeLanguage(detected.language), confidence: detected.confidence };
     },
   };
 }

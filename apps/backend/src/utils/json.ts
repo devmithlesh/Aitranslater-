@@ -11,7 +11,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
  * Pulls the outermost JSON object out of model output. Tolerates Markdown
  * fences and chatter before or after the object.
  */
-export function extractJsonObject(raw: string): unknown {
+function extractJsonObject(raw: string): unknown {
   const start = raw.indexOf('{');
   const end = raw.lastIndexOf('}');
   if (start === -1 || end <= start) throw new Error('No JSON object found in model output.');

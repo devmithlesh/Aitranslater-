@@ -4,7 +4,8 @@ import { AdminService } from './admin.service';
 import { AuthService } from './auth.service';
 import { AiService } from './ai.service';
 import { CreditsService } from './credits.service';
-import { HistoryService } from './history.service';
+import { FeedbackService } from './feedback.service';
+import { ActivityService } from './activity.service';
 import { ProviderRegistry } from './provider-registry';
 import { SettingsService } from './settings.service';
 import { StatsService } from './stats.service';
@@ -15,7 +16,7 @@ import { UsersService } from './users.service';
 export interface Services {
   settings: SettingsService;
   usage: UsageService;
-  history: HistoryService;
+  activity: ActivityService;
   registry: ProviderRegistry;
   translation: TranslationService;
   ai: AiService;
@@ -24,6 +25,7 @@ export interface Services {
   users: UsersService;
   admin: AdminService;
   auth: AuthService;
+  feedback: FeedbackService;
 }
 
 /**
@@ -38,14 +40,19 @@ export function createServices(
 ): Services {
   const settings = new SettingsService(storage, now);
   const usage = new UsageService(storage, now);
-  const history = new HistoryService(storage, usage);
+  const activity = new ActivityService(usage);
   const registry = new ProviderRegistry(storage, usage, config, encryptionKey, now);
-  const translation = new TranslationService(registry, settings, history);
-  const ai = new AiService(registry, settings, history, translation, storage, now);
-  const stats = new StatsService(storage, usage, history, now);
-  const credits = new CreditsService(storage, now);
+  const translation = new TranslationService(registry, settings, activity);
+  const ai = new AiService(registry, activity, storage, now);
+  const stats = new StatsService(storage, usage, now);
+  const credits = new CreditsService(storage, now, {
+    dailyLimit: config.guestDailyLimit,
+    ipDailyLimit: config.guestIpDailyLimit,
+    globalDailyLimit: config.guestGlobalDailyLimit,
+  });
   const users = new UsersService(storage, credits, now);
   const admin = new AdminService(storage, registry, usage, now);
   const auth = new AuthService(config, storage, credits, now);
-  return { settings, usage, history, registry, translation, ai, stats, credits, users, admin, auth };
+  const feedback = new FeedbackService(storage, now);
+  return { settings, usage, activity, registry, translation, ai, stats, credits, users, admin, auth, feedback };
 }

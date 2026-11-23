@@ -1,13 +1,12 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { CustomAssistant, HistoryItem, UserSettings } from '@verba/shared';
+import type { CustomAssistant, UserSettings } from '@verba/shared';
 import { LOCAL_USER_ID } from '../middleware/auth';
 import type {
   ActivityAggregates,
   CreditLedger,
   ExtensionStatusRecord,
-  HistoryFilter,
-  HistoryPage,
+  FeedbackRecord,
   ProviderUsageRecord,
   Storage,
   StoredAppConfig,
@@ -19,7 +18,6 @@ import type {
 interface Collections {
   settings: Record<string, UserSettings | undefined>;
   assistants: Record<string, CustomAssistant[] | undefined>;
-  history: Record<string, HistoryItem[] | undefined>;
   providers: Record<string, Record<string, StoredProviderConfig> | undefined>;
   usage: Record<string, Record<string, ProviderUsageRecord> | undefined>;
   activity: Record<string, ActivityAggregates | undefined>;
@@ -29,6 +27,8 @@ interface Collections {
   sessions: Record<string, StoredSession | undefined>;
   appConfig: StoredAppConfig | undefined;
   credits: Record<string, CreditLedger | undefined>;
+  /** Newest first. Not user-scoped. */
+  feedback: FeedbackRecord[];
 }
 
 type CollectionName = keyof Collections;
@@ -36,7 +36,6 @@ type CollectionName = keyof Collections;
 const COLLECTION_NAMES: readonly CollectionName[] = [
   'settings',
   'assistants',
-  'history',
   'providers',
   'usage',
   'activity',
@@ -45,13 +44,13 @@ const COLLECTION_NAMES: readonly CollectionName[] = [
   'sessions',
   'appConfig',
   'credits',
+  'feedback',
 ];
 
 /** Collections keyed by userId. deleteUser removes the user's entry from each of these. */
 const USER_SCOPED: readonly CollectionName[] = [
   'settings',
   'assistants',
-  'history',
   'providers',
   'usage',
   'activity',
@@ -63,7 +62,6 @@ const USER_SCOPED: readonly CollectionName[] = [
 const FILE_NAMES: Record<CollectionName, string> = {
   settings: 'settings',
   assistants: 'assistants',
-  history: 'history',
   providers: 'providers',
   usage: 'usage',
   activity: 'activity',
@@ -72,15 +70,18 @@ const FILE_NAMES: Record<CollectionName, string> = {
   sessions: 'sessions',
   appConfig: 'app-config',
   credits: 'credits',
+  feedback: 'feedback',
 };
 
 const RENAME_RETRIES = 5;
+
+/** Feedback entries kept in feedback.json (newest first). */
+const FEEDBACK_KEPT = 2000;
 
 function emptyCollections(): Collections {
   return {
     settings: {},
     assistants: {},
-    history: {},
     providers: {},
     usage: {},
     activity: {},
@@ -89,6 +90,7 @@ function emptyCollections(): Collections {
     sessions: {},
     appConfig: undefined,
     credits: {},
+    feedback: [],
   };
 }
 
@@ -131,7 +133,7 @@ function normalizeUserRecords(value: unknown): Record<string, StoredUser | undef
 }
 
 /** Credit ledgers keep this many most recent day keys. */
-export const CREDIT_DAYS_KEPT = 62;
+const CREDIT_DAYS_KEPT = 62;
 
 /** Keeps only the newest CREDIT_DAYS_KEPT day keys ("YYYY-MM-DD" sorts chronologically). */
 export function pruneCreditDays(daily: Record<string, number>): Record<string, number> {
@@ -182,13 +184,15 @@ export class FileStorage implements Storage {
 
   async init(): Promise<void> {
     await mkdir(this.dir, { recursive: true });
+    // Verba no longer keeps history. Remove the file an older version left behind, so no old text stays on disk.
+    await unlink(join(this.dir, 'history.json')).catch(() => undefined);
     for (const name of COLLECTION_NAMES) {
       const text = await readOptional(this.pathFor(name));
       if (text === undefined) continue;
       try {
         const parsed: unknown = JSON.parse(text);
         // Older users.json records lack the account fields; normalise them so reads never see undefined.
-        const value = name === 'users' ? normalizeUserRecords(parsed) : parsed;
+        const value = name === 'users' ? normalizeUserRecords(parsed) : name === 'feedback' && !Array.isArray(parsed) ? [] : parsed;
         setCollection(this.data, name, value as Collections[typeof name]);
       } catch {
         throw new Error(`${this.pathFor(name)} is not valid JSON. Move it aside to start with empty data.`);
@@ -203,7 +207,6 @@ export class FileStorage implements Storage {
   async listUserIds(): Promise<string[]> {
     const ids = new Set<string>([
       ...Object.keys(this.data.settings),
-      ...Object.keys(this.data.history),
       ...Object.keys(this.data.users),
     ]);
     return [...ids];
@@ -242,62 +245,6 @@ export class FileStorage implements Storage {
     this.data.assistants[userId] = next;
     await this.persist('assistants');
     return true;
-  }
-
-  async insertHistory(userId: string, item: HistoryItem): Promise<void> {
-    const list = this.data.history[userId] ?? [];
-    list.unshift(item);
-    this.data.history[userId] = list;
-    await this.persist('history');
-  }
-
-  async queryHistory(userId: string, filter: HistoryFilter): Promise<HistoryPage> {
-    const needle = filter.q?.toLowerCase();
-    const matches = (this.data.history[userId] ?? []).filter((item) => {
-      if (filter.type && item.type !== filter.type) return false;
-      if (filter.favorite !== undefined && item.favorite !== filter.favorite) return false;
-      if (needle && !`${item.input}\n${item.output}`.toLowerCase().includes(needle)) return false;
-      return true;
-    });
-    return {
-      items: matches.slice(filter.offset, filter.offset + filter.limit).map((item) => ({ ...item })),
-      total: matches.length,
-    };
-  }
-
-  async setHistoryFavorite(userId: string, id: string, favorite: boolean): Promise<HistoryItem | undefined> {
-    const item = this.data.history[userId]?.find((entry) => entry.id === id);
-    if (!item) return undefined;
-    item.favorite = favorite;
-    await this.persist('history');
-    return { ...item };
-  }
-
-  async deleteHistoryItem(userId: string, id: string): Promise<boolean> {
-    const list = this.data.history[userId] ?? [];
-    const next = list.filter((item) => item.id !== id);
-    if (next.length === list.length) return false;
-    this.data.history[userId] = next;
-    await this.persist('history');
-    return true;
-  }
-
-  async clearHistory(userId: string): Promise<number> {
-    const count = this.data.history[userId]?.length ?? 0;
-    this.data.history[userId] = [];
-    await this.persist('history');
-    return count;
-  }
-
-  async pruneHistory(userId: string, beforeIso: string): Promise<number> {
-    const list = this.data.history[userId] ?? [];
-    const kept = list.filter((item) => item.favorite || item.createdAt >= beforeIso);
-    const removed = list.length - kept.length;
-    if (removed > 0) {
-      this.data.history[userId] = kept;
-      await this.persist('history');
-    }
-    return removed;
   }
 
   async getProviderConfigs(userId: string): Promise<Partial<Record<string, StoredProviderConfig>>> {
@@ -382,6 +329,12 @@ export class FileStorage implements Storage {
       touched.push(name);
     }
     if (this.removeSessionsWhere((session) => session.userId === id) > 0) touched.push('sessions');
+    // Feedback they wrote goes with the account: it can contain personal details.
+    const kept = this.data.feedback.filter((item) => item.userId !== id);
+    if (kept.length !== this.data.feedback.length) {
+      this.data.feedback = kept;
+      touched.push('feedback');
+    }
     await Promise.all(touched.map((name) => this.persist(name)));
     return true;
   }
@@ -435,6 +388,16 @@ export class FileStorage implements Storage {
   async saveAppConfig(config: StoredAppConfig): Promise<void> {
     this.data.appConfig = { ...config, providerDailyQuotas: { ...config.providerDailyQuotas } };
     await this.persist('appConfig');
+  }
+
+  async insertFeedback(item: FeedbackRecord): Promise<void> {
+    // Bounded so the file cannot grow forever; the newest entries are the ones worth reading.
+    this.data.feedback = [{ ...item }, ...this.data.feedback].slice(0, FEEDBACK_KEPT);
+    await this.persist('feedback');
+  }
+
+  async listFeedback(limit: number): Promise<FeedbackRecord[]> {
+    return this.data.feedback.slice(0, limit).map((item) => ({ ...item }));
   }
 
   async getCredits(userId: string): Promise<CreditLedger | undefined> {

@@ -1,4 +1,5 @@
-import { ExternalLink, LogOut, Settings } from 'lucide-react';
+import { GUIDE_PATH } from '@verba/shared';
+import { ArrowLeft, BookOpen, ExternalLink, LogIn, LogOut, MessageSquarePlus, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { connectionStatus, StatusDot } from '../components/ConnectionStatus';
 import { localError } from '../components/errors';
@@ -12,6 +13,9 @@ import { sendToBackground, type ExtensionError } from '../shared/messages';
 import { AuthPanel, type AuthMode } from './AuthPanel';
 import { SegmentedControl } from '../components/ui/SegmentedControl';
 import { ExplainSelectionCard } from './ExplainSelectionCard';
+import { GuestProvider } from './shared/guest';
+import { openShortcutSettings, useShortcuts } from './shared/useShortcuts';
+import { FeedbackPanel } from './feedback/FeedbackPanel';
 import { TranslatorView } from './translator/TranslatorView';
 import { WriteView } from './writer/WriteView';
 
@@ -21,10 +25,20 @@ export function Popup() {
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [signingOut, setSigningOut] = useState(false);
   const [tab, setTab] = useState<'translate' | 'write'>('translate');
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  /** Signed-out visitors use the tools first; this swaps them for the sign-in form. */
+  const [authOpen, setAuthOpen] = useState(false);
   const status = connectionStatus(state);
+  const shortcuts = useShortcuts();
 
   async function handleOpenDashboard() {
     const res = await openDashboard();
+    setNotice(res.ok ? null : res.error);
+  }
+
+  /** The how-to page (with the video) on the website. */
+  async function handleOpenGuide() {
+    const res = await openDashboard(GUIDE_PATH);
     setNotice(res.ok ? null : res.error);
   }
 
@@ -43,6 +57,13 @@ export function Popup() {
 
   const connected = state?.connected === true;
   const signedOutReady = state !== null && !connected;
+  const guestValue = {
+    isGuest: signedOutReady,
+    openAuth: (mode: AuthMode) => {
+      setAuthMode(mode);
+      setAuthOpen(true);
+    },
+  };
 
   return (
     <div className="flex max-h-[580px] min-h-[240px] min-w-0 flex-col overflow-x-hidden bg-bg text-fg">
@@ -52,17 +73,28 @@ export function Popup() {
         <StatusDot tone={status.tone} label={status.label} className="ml-0.5" />
         <div className="ml-auto flex items-center gap-0.5">
           {signedOutReady && (
-            // One switch: offers the form that is not showing.
+            // Free use comes first: this opens the form, and the same spot takes the visitor back.
             <button
               type="button"
-              onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-              className="mr-1 inline-flex h-6 items-center rounded-md bg-brand-gradient px-2.5 text-[11.5px] font-semibold text-brand-fg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              onClick={() => {
+                setAuthMode('signin');
+                setAuthOpen((open) => !open);
+              }}
+              className="mr-1 inline-flex h-6 items-center gap-1 rounded-md bg-brand-gradient px-2.5 text-[11.5px] font-semibold text-brand-fg transition hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
             >
-              {authMode === 'signin' ? 'Sign up' : 'Sign in'}
+              {authOpen ? <ArrowLeft size={12} aria-hidden /> : <LogIn size={12} aria-hidden />}
+              {authOpen ? 'Back' : 'Sign in'}
             </button>
           )}
           {connected && (
             <>
+              <IconButton
+                icon={MessageSquarePlus}
+                label="Send feedback"
+                size="sm"
+                active={feedbackOpen}
+                onClick={() => setFeedbackOpen((open) => !open)}
+              />
               <IconButton icon={ExternalLink} label="Open dashboard" size="sm" onClick={() => void handleOpenDashboard()} />
               <IconButton
                 icon={LogOut}
@@ -74,6 +106,7 @@ export function Popup() {
               />
             </>
           )}
+          <IconButton icon={BookOpen} label="How to use Verba" size="sm" onClick={() => void handleOpenGuide()} />
           <IconButton icon={Settings} label="Settings" size="sm" onClick={() => void handleOpenSettings()} />
         </div>
       </header>
@@ -96,12 +129,23 @@ export function Popup() {
           </div>
         )}
 
-        {state && !connected && (
-          <AuthPanel mode={authMode} onModeChange={setAuthMode} onSignedIn={refresh} />
+        {state && !connected && authOpen && (
+          <AuthPanel
+            mode={authMode}
+            onModeChange={setAuthMode}
+            onSignedIn={() => {
+              setAuthOpen(false);
+              refresh();
+            }}
+          />
         )}
 
-        {state && connected && (
-          <div className="min-w-0 space-y-3 p-3">
+        {state && connected && feedbackOpen && <FeedbackPanel onBack={() => setFeedbackOpen(false)} />}
+
+        {state && (
+          <GuestProvider value={guestValue}>
+          {/* Hidden, not unmounted, while a visitor signs in: what they typed and the result stay for when they come back. */}
+          <div hidden={feedbackOpen || (!connected && authOpen)} className="min-w-0 space-y-4 p-4">
             <SegmentedControl
               label="Verba mode"
               size="sm"
@@ -116,18 +160,39 @@ export function Popup() {
             {/* Hidden, not unmounted: remounting would re-run the translator's auto-translate and spend a credit. */}
             <div hidden={tab !== 'translate'} className="space-y-3">
               <ExplainSelectionCard settings={state.settings} />
-              <TranslatorView settings={state.settings} />
+              <TranslatorView settings={state.settings} active={tab === 'translate' && !feedbackOpen} />
             </div>
             <div hidden={tab !== 'write'}>
-              <WriteView settings={state.settings} />
+              <WriteView settings={state.settings} active={tab === 'write' && !feedbackOpen} />
             </div>
           </div>
+          </GuestProvider>
         )}
       </div>
 
       <footer className="min-w-0 border-t border-border bg-surface px-3 py-2 text-[11px] leading-4 text-subtle">
-        <span className="font-medium text-muted">Alt+Shift+V</span> in any text box to open Verba. Select text and{' '}
-        <span className="font-medium text-muted">right-click → Explain with Verba</span> (works on PDFs too).
+        {/* Two short lines at most, each cut off with … if the window is narrow. */}
+        <p className="truncate">
+          {shortcuts.translateInPlace ? (
+            <>
+              <span className="font-medium text-muted">{shortcuts.translateInPlace}</span> translates what you typed
+            </>
+          ) : (
+            <>
+              Translate without opening Verba:{' '}
+              <button
+                type="button"
+                onClick={openShortcutSettings}
+                className="font-medium text-brand underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              >
+                set a shortcut
+              </button>
+            </>
+          )}
+        </p>
+        <p className="truncate">
+          <span className="font-medium text-muted">{shortcuts.openPopup}</span> opens Verba
+        </p>
       </footer>
     </div>
   );

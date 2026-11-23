@@ -12,7 +12,7 @@ function setCached(next: ExtensionState | null): void {
 }
 
 /** Defaults merged under whatever the backend last synced. */
-export function effectiveSettings(state: ExtensionState | null): EffectiveSettings {
+function effectiveSettings(state: ExtensionState | null): EffectiveSettings {
   const saved = state?.settings ?? null;
   return {
     ...DEFAULT_SETTINGS,

@@ -50,7 +50,18 @@ export function createOpenAiCompatibleProvider(id: LlmProviderId, http: HttpOpti
         model,
         messages: [
           { role: 'system', content: input.system },
-          { role: 'user', content: input.prompt },
+          {
+            role: 'user',
+            content: input.images?.length
+              ? [
+                  { type: 'text', text: input.prompt },
+                  ...input.images.map((image) => ({
+                    type: 'image_url',
+                    image_url: { url: `data:${image.mimeType};base64,${image.data}` },
+                  })),
+                ]
+              : input.prompt,
+          },
         ],
         temperature: input.temperature ?? 0.3,
         max_tokens: input.maxTokens,

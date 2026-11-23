@@ -65,7 +65,7 @@ export function AuthPanel({ mode, onModeChange, onSignedIn }: AuthPanelProps) {
   const passwordOk = isSignup
     ? password.length >= PASSWORD_MIN_LENGTH && password.length <= PASSWORD_MAX_LENGTH
     : password.length > 0 && password.length <= PASSWORD_MAX_LENGTH;
-  const canSubmit = nameOk && emailOk && passwordOk && !busy;
+  const canSubmit = nameOk && emailOk && passwordOk && !busy && !googleBusy;
 
   /** The password is always cleared after an attempt and is never logged or kept in state. */
   async function submit(event: FormEvent<HTMLFormElement>) {

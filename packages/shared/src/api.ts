@@ -4,13 +4,12 @@
  * require `Authorization: Bearer <access token>`.
  *
  * Clients identify themselves with the `X-Verba-Client: web | extension`
- * header so history and stats can attribute activity.
+ * header so usage stats can attribute activity.
  *
  * Errors always use the `ApiErrorBody` shape with a matching HTTP status.
  */
 import type {
   ActivityType,
-  AssistantToolId,
   ExplainLanguage,
   ReplyLength,
   ReplyStyle,
@@ -53,8 +52,6 @@ export interface ProviderMeta {
   provider: ProviderId;
   model?: string;
   latencyMs: number;
-  /** Present when the result was saved to history. */
-  historyId?: string;
 }
 
 // ── Health / auth ───────────────────────────────────────────────────
@@ -353,60 +350,6 @@ export interface TranslateVariantsResponse extends ProviderMeta {
   romanized?: boolean;
 }
 
-/** POST /api/detect-language */
-export interface DetectLanguageRequest {
-  text: string;
-}
-export interface DetectLanguageResponse extends Omit<ProviderMeta, 'historyId'> {
-  language: string;
-  /** 0..1 when the provider reports it. */
-  confidence?: number;
-}
-
-// ── Grammar ─────────────────────────────────────────────────────────
-export type GrammarIssueType = 'grammar' | 'spelling' | 'punctuation' | 'style' | 'clarity';
-
-export interface GrammarIssue {
-  type: GrammarIssueType;
-  /** Exact substring of the ORIGINAL text that is wrong. */
-  original: string;
-  replacement: string;
-  explanation: string;
-}
-
-/** POST /api/grammar */
-export interface GrammarRequest {
-  text: string;
-  /** Hint; defaults to the text's own language. */
-  language?: string;
-}
-export interface GrammarResponse extends ProviderMeta {
-  corrected: string;
-  issues: GrammarIssue[];
-}
-
-// ── Rewrite ─────────────────────────────────────────────────────────
-/** POST /api/rewrite */
-export interface RewriteRequest {
-  text: string;
-  style: RewriteStyle;
-  /** Free-form extra instruction, e.g. "keep it under 50 words". */
-  customInstructions?: string;
-}
-export interface RewriteResponse extends ProviderMeta {
-  result: string;
-}
-
-// ── Summarize ───────────────────────────────────────────────────────
-/** POST /api/summarize */
-export interface SummarizeRequest {
-  text: string;
-  format?: SummaryFormat;
-}
-export interface SummarizeResponse extends ProviderMeta {
-  result: string;
-}
-
 // ── Explain ─────────────────────────────────────────────────────────
 /** POST /api/explain — explains selected text in plain, simple words. */
 export interface ExplainRequest {
@@ -423,14 +366,28 @@ export interface ExplainResponse extends ProviderMeta {
 /** Longest instruction accepted by POST /api/write. */
 export const WRITE_PROMPT_MAX_LENGTH = 2000;
 
+/** Pictures (screenshots) that can come with a write request. The extension shrinks them first. */
+export const WRITE_IMAGE_MAX_COUNT = 3;
+/** Longest base64 string per picture (about 2 MB of image). */
+export const WRITE_IMAGE_MAX_BASE64_LENGTH = 2_800_000;
+export const WRITE_IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const;
+export type WriteImageMimeType = (typeof WRITE_IMAGE_MIME_TYPES)[number];
+export interface WriteImage {
+  mimeType: WriteImageMimeType;
+  /** Base64 of the image bytes, without the "data:...;base64," prefix. */
+  data: string;
+}
+
 /**
  * POST /api/write — writes new content from a request in any language
  * ("write a leave application for 2 days", "reply politely to this…"). Costs 1 daily credit;
  * a failed call gives it back.
  */
 export interface WriteRequest {
-  /** What to write, 1..WRITE_PROMPT_MAX_LENGTH characters after trim. */
+  /** What to write, up to WRITE_PROMPT_MAX_LENGTH characters after trim. May be empty when images are sent. */
   prompt: string;
+  /** Optional pictures the AI should read (up to WRITE_IMAGE_MAX_COUNT). */
+  images?: WriteImage[];
   /** Language of the written content (supported language code). Defaults to English ("en"). */
   targetLang?: string;
 }
@@ -464,39 +421,6 @@ export interface ReplyVariantsResponse extends ProviderMeta {
   variants: TranslationVariant[];
 }
 
-// ── Smart reply ─────────────────────────────────────────────────────
-/** POST /api/smart-reply */
-export interface SmartReplyRequest {
-  /** The message / conversation being replied to. */
-  context: string;
-  /** Optional: what the user wants to say ("accept, propose Tuesday"). */
-  intent?: string;
-  style: ReplyStyle;
-  length: ReplyLength;
-  /** Number of alternatives, 1–3. Default 1. */
-  count?: number;
-}
-export interface SmartReplyResponse extends ProviderMeta {
-  replies: string[];
-}
-
-// ── AI assistant ────────────────────────────────────────────────────
-/**
- * POST /api/ai-assistant — exactly one of `toolId` or `assistantId`.
- * `toolId: "custom"` requires `prompt`. `toolId: "translate"` uses `targetLang`
- * (falls back to the user's default target language).
- */
-export interface AssistantRunRequest {
-  text: string;
-  toolId?: AssistantToolId;
-  assistantId?: string;
-  prompt?: string;
-  targetLang?: string;
-}
-export interface AssistantRunResponse extends ProviderMeta {
-  result: string;
-}
-
 // ── Custom assistants ───────────────────────────────────────────────
 export interface CustomAssistant {
   id: string;
@@ -521,50 +445,6 @@ export interface AssistantListResponse {
   items: CustomAssistant[];
 }
 
-// ── History ─────────────────────────────────────────────────────────
-export interface HistoryItem {
-  id: string;
-  type: ActivityType;
-  input: string;
-  output: string;
-  meta: {
-    provider: ProviderId;
-    model?: string;
-    sourceLang?: string;
-    targetLang?: string;
-    detectedLang?: string;
-    tone?: TranslationTone;
-    style?: RewriteStyle | ReplyStyle;
-    /** True when the input looked like romanized text (e.g. Hinglish) and was transliterated. */
-    romanized?: boolean;
-    format?: SummaryFormat;
-    toolId?: AssistantToolId;
-    assistantId?: string;
-    assistantName?: string;
-  };
-  client: ClientKind;
-  favorite: boolean;
-  createdAt: string;
-}
-
-/** GET /api/history?type=&q=&favorite=true&limit=30&cursor= */
-export interface HistoryQuery {
-  type?: ActivityType;
-  q?: string;
-  favorite?: boolean;
-  limit?: number;
-  /** Opaque cursor from a previous page. */
-  cursor?: string;
-}
-export interface HistoryListResponse {
-  items: HistoryItem[];
-  nextCursor: string | null;
-  total: number;
-}
-// PATCH /api/history/:id ({ favorite: boolean }) → HistoryItem
-// DELETE /api/history/:id → 204
-// DELETE /api/history → { deleted: number }   (clear all)
-
 // ── Settings ────────────────────────────────────────────────────────
 export interface ExtensionSettings {
   enabled: boolean;
@@ -587,9 +467,6 @@ export interface UserSettings {
   defaultReplyStyle: ReplyStyle;
   defaultReplyLength: ReplyLength;
   defaultSummaryFormat: SummaryFormat;
-  saveHistory: boolean;
-  /** 0 = keep forever. */
-  historyRetentionDays: number;
   /** Show "text is sent to <provider>" notices in the UIs. */
   showPrivacyNotice: boolean;
   extension: ExtensionSettings;
@@ -610,8 +487,6 @@ export const DEFAULT_SETTINGS: Omit<UserSettings, 'updatedAt'> = {
   defaultReplyStyle: 'professional',
   defaultReplyLength: 'short',
   defaultSummaryFormat: 'medium',
-  saveHistory: true,
-  historyRetentionDays: 90,
   showPrivacyNotice: true,
   extension: {
     enabled: true,
@@ -695,7 +570,6 @@ export interface StatsResponse {
   topTools: { type: ActivityType; count: number }[];
   topLanguages: { code: string; count: number }[];
   charsProcessed: number;
-  recent: HistoryItem[];
   byClient: Record<ClientKind, number>;
 }
 
@@ -712,6 +586,37 @@ export interface ExtensionStatusResponse {
   online: boolean;
   lastSeenAt: string | null;
   version: string | null;
+}
+
+// ── Feedback ────────────────────────────────────────────────────────
+export const FEEDBACK_CATEGORIES = ['idea', 'bug', 'other'] as const;
+export type FeedbackCategory = (typeof FEEDBACK_CATEGORIES)[number];
+export const FEEDBACK_MESSAGE_MAX_LENGTH = 2000;
+
+/** POST /api/feedback → 201 FeedbackResponse. Free of credits. */
+export interface FeedbackRequest {
+  /** 3..FEEDBACK_MESSAGE_MAX_LENGTH characters after trim. */
+  message: string;
+  /** Defaults to "idea". */
+  category?: FeedbackCategory;
+}
+export interface FeedbackResponse {
+  id: string;
+}
+
+/** One message in the admin's feedback list. The name and email are looked up from the account (null once it is deleted). */
+export interface AdminFeedbackItem {
+  id: string;
+  category: FeedbackCategory;
+  message: string;
+  client: ClientKind;
+  createdAt: string;
+  userName: string | null;
+  userEmail: string | null;
+}
+/** GET /api/admin/feedback (admin only): the newest messages first. */
+export interface AdminFeedbackResponse {
+  items: AdminFeedbackItem[];
 }
 
 /**

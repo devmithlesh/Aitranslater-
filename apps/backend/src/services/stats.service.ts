@@ -2,20 +2,17 @@ import { ACTIVITY_TYPES } from '@verba/shared';
 import type { ExtensionStatusResponse, ProviderUsage, StatsResponse } from '@verba/shared';
 import type { Storage } from '../storage/types';
 import { daysAgo, dayKey } from '../utils/dates';
-import type { HistoryService } from './history.service';
 import { usageSummariesFor } from './usage.service';
 import type { UsageService } from './usage.service';
 
 const EXTENSION_ONLINE_MS = 10 * 60 * 1000;
 const DAILY_WINDOW_DAYS = 14;
 const TOP_LANGUAGES = 6;
-const RECENT_ITEMS = 8;
 
 export class StatsService {
   constructor(
     private readonly storage: Storage,
     private readonly usage: UsageService,
-    private readonly history: HistoryService,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
@@ -41,15 +38,12 @@ export class StatsService {
       .sort((a, b) => b.count - a.count)
       .slice(0, TOP_LANGUAGES);
 
-    const recent = (await this.history.list(userId, { limit: RECENT_ITEMS })).items;
-
     return {
       totals: { ...activity.totals, all },
       daily,
       topTools,
       topLanguages,
       charsProcessed: activity.charsProcessed,
-      recent,
       byClient: { ...activity.byClient },
     };
   }

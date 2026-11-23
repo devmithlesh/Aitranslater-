@@ -18,6 +18,7 @@ import {
   openOptions,
   signupExtension,
 } from './connection';
+import { openPopup } from './launcher';
 import { syncNow } from './sync';
 
 function optString(value: unknown): string | undefined {
@@ -81,12 +82,14 @@ export function parseRequest(value: unknown): BackgroundRequest | null {
       return { type: 'verba:open-dashboard', path: optString(value.path) };
     case 'verba:open-options':
       return { type: 'verba:open-options' };
+    case 'verba:open-popup':
+      return { type: 'verba:open-popup' };
     default:
       return null;
   }
 }
 
-async function dispatch(request: BackgroundRequest): Promise<unknown> {
+async function dispatch(request: BackgroundRequest, sender: chrome.runtime.MessageSender): Promise<unknown> {
   switch (request.type) {
     case 'verba:api':
       return callBackend(request.method, request.path, request.body);
@@ -106,6 +109,8 @@ async function dispatch(request: BackgroundRequest): Promise<unknown> {
       return openDashboard(request.path);
     case 'verba:open-options':
       return openOptions();
+    case 'verba:open-popup':
+      return openPopup(sender);
   }
 }
 
@@ -129,7 +134,7 @@ export async function handleRequest(message: unknown, sender: chrome.runtime.Mes
     if (!isRequestAllowed(trust, request)) {
       return fail('FORBIDDEN_PATH', 'This request is not allowed from this page.');
     }
-    return await dispatch(request);
+    return await dispatch(request, sender);
   } catch (err) {
     console.warn('Verba: request failed', err instanceof Error ? err.name : 'unknown');
     return fail('INTERNAL', 'Something went wrong in Verba. Try again.');

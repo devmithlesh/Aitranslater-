@@ -55,7 +55,15 @@ export function createGeminiProvider(http: HttpOptions): LlmProvider {
         headers: { 'x-goog-api-key': cfg.apiKey },
         body: {
           systemInstruction: { parts: [{ text: input.system }] },
-          contents: [{ role: 'user', parts: [{ text: input.prompt }] }],
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { text: input.prompt },
+                ...(input.images ?? []).map((image) => ({ inlineData: { mimeType: image.mimeType, data: image.data } })),
+              ],
+            },
+          ],
           generationConfig: {
             temperature: input.temperature ?? 0.3,
             maxOutputTokens: input.maxTokens ?? 2048,

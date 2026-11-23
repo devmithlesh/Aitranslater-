@@ -23,7 +23,11 @@ describe('normalizeDetectedLanguage', () => {
   });
 
   it('returns undefined for unknown languages', () => {
-    expect(normalizeDetectedLanguage('Hinglish')).toBeUndefined();
+    expect(normalizeDetectedLanguage('Klingon')).toBeUndefined();
     expect(normalizeDetectedLanguage('')).toBeUndefined();
+  });
+
+  it('maps Hinglish to Hindi', () => {
+    expect(normalizeDetectedLanguage('Hinglish')).toBe('hi');
   });
 });

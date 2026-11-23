@@ -39,6 +39,11 @@ export interface SelectionInfo {
   text: string;
   /** location.hostname of the frame. */
   site: string;
+  /**
+   * True when the highlighted text is inside a text box the user types in (their own message), not page text
+   * they are reading. Explain and Reply are for text on the page, so the popup hides them for this.
+   */
+  inEditable?: boolean;
 }
 
 export interface PageBridge {

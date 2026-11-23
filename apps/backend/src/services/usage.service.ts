@@ -5,7 +5,7 @@ import type { ActivityAggregates, ProviderUsageRecord, Storage, UsageBucket } fr
 
 const MAX_DAILY_KEYS = 400;
 
-export function emptyActivity(): ActivityAggregates {
+function emptyActivity(): ActivityAggregates {
   return {
     totals: {
       translate: 0,

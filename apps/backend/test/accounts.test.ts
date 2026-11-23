@@ -96,7 +96,7 @@ describe('accounts, roles and daily credits', () => {
         request(h.app).get('/api/admin/users').set(as(token)),
         request(h.app).get('/api/admin/usage').set(as(token)),
         request(h.app).get('/api/admin/config').set(as(token)),
-        request(h.app).get('/api/history').set(as(token)),
+        request(h.app).get('/api/stats').set(as(token)),
         request(h.app).get('/api/stats').set(as(token)),
         request(h.app).post('/api/translate').set(as(token)).send(TRANSLATE),
         request(h.app).post('/api/admin/users').set(as(token)).send({ name: 'Nope' }),
@@ -178,10 +178,9 @@ describe('accounts, roles and daily credits', () => {
       expect(res.body.provider).toBe('gemini');
       expect(fetchMock.mock.calls[0][1]?.headers).toMatchObject({ 'x-goog-api-key': GEMINI_KEY });
 
-      const userHistory = await h.storage.queryHistory(id, { offset: 0, limit: 10 });
-      expect(userHistory.total).toBe(1);
-      const adminHistory = await h.storage.queryHistory('local', { offset: 0, limit: 10 });
-      expect(adminHistory.total).toBe(0);
+      // The activity is counted under the user (not the admin), and no text is kept.
+      expect((await h.storage.getActivity(id))?.totals.translate).toBe(1);
+      expect((await h.storage.getActivity('local'))?.totals.translate ?? 0).toBe(0);
 
       const me = await request(h.app).get('/api/me').set(as(token));
       expect(me.body.credits).toMatchObject({ used: 1 });

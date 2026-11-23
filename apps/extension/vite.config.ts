@@ -28,6 +28,7 @@ export default defineConfig({
         popup: fileURLToPath(new URL('./src/pages/popup.html', import.meta.url)),
         options: fileURLToPath(new URL('./src/pages/options.html', import.meta.url)),
         sidepanel: fileURLToPath(new URL('./src/pages/sidepanel.html', import.meta.url)),
+        'mic-permission': fileURLToPath(new URL('./src/pages/mic-permission.html', import.meta.url)),
       },
     },
   },

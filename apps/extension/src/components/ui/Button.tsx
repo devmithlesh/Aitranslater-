@@ -24,15 +24,15 @@ const variants: Record<Variant, string> = {
 };
 
 const sizes: Record<Size, string> = {
-  sm: 'h-7 gap-1.5 rounded-lg px-2.5 text-[12.5px]',
-  md: 'h-9 gap-2 rounded-[10px] px-3.5 text-[13.5px]',
+  sm: 'h-6 gap-1 rounded-md px-2 text-[11.5px]',
+  md: 'h-8 gap-1.5 rounded-lg px-3 text-[12px]',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
   { variant = 'primary', size = 'md', loading, icon: Icon, fullWidth, className, children, disabled, type = 'button', ...rest },
   ref,
 ) {
-  const iconSize = size === 'sm' ? 14 : 16;
+  const iconSize = size === 'sm' ? 12 : 14;
   return (
     <button
       ref={ref}
@@ -76,13 +76,13 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       className={cn(
         'inline-flex shrink-0 items-center justify-center rounded-lg transition-colors duration-150',
         'disabled:pointer-events-none disabled:opacity-40',
-        size === 'sm' ? 'h-6 w-6' : 'h-8 w-8',
+        size === 'sm' ? 'h-5 w-5' : 'h-7 w-7',
         active ? 'bg-brand-soft text-brand' : 'text-muted hover:bg-surface-2 hover:text-fg',
         className,
       )}
       {...rest}
     >
-      <Icon size={size === 'sm' ? 14 : 16} strokeWidth={2} aria-hidden />
+      <Icon size={size === 'sm' ? 12 : 14} strokeWidth={2} aria-hidden />
     </button>
   );
 });

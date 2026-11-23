@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Verba — AI Writing & Translation",
+  "name": "Verba: Hindi English Translator & AI Writing Assistant",
   "short_name": "Verba",
   "version": "1.0.2",
-  "description": "Translate and rewrite text in any box, and right-click selected text to get a simple AI explanation in the side panel.",
-  "minimum_chrome_version": "116",
+  "description": "Hindi to English translator, Hinglish support, smart replies and an AI assistant that reads screenshots.",
+  "minimum_chrome_version": "127",
   "icons": {
     "16": "icons/icon-16.png",
     "32": "icons/icon-32.png",
@@ -46,6 +46,12 @@
   "permissions": ["identity", "storage", "alarms", "activeTab", "scripting", "contextMenus", "sidePanel"],
   "host_permissions": [
     "https://aitranslater.onrender.com/*",
+    "https://mail.google.com/*",
+    "https://outlook.live.com/*",
+    "https://outlook.office.com/*",
+    "https://outlook.office365.com/*",
+    "https://mail.yahoo.com/*",
+    "https://mail.proton.me/*",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],
@@ -53,6 +59,10 @@
     "_execute_action": {
       "suggested_key": { "default": "Alt+Shift+V" },
       "description": "Open Verba translator"
+    },
+    "translate-in-place": {
+      "suggested_key": { "default": "Alt+Shift+E" },
+      "description": "Translate the text you typed in the focused box"
     }
   }
 }

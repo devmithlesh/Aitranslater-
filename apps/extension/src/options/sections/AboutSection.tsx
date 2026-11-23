@@ -26,7 +26,7 @@ export function AboutSection() {
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
-        <p className="text-[12.5px] text-muted">Account, providers and history live in the dashboard.</p>
+        <p className="text-[12.5px] text-muted">Your account and providers live in the dashboard.</p>
         <Button variant="outline" size="sm" icon={ExternalLink} onClick={() => void openDashboardHome()}>
           Open dashboard
         </Button>

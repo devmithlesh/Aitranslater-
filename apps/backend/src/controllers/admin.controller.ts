@@ -5,6 +5,9 @@ import type { Services } from '../services';
 import { asyncHandler } from '../utils/request';
 
 /** Admin-only routes. The role gate in the auth middleware rejects every other caller before these run. */
+/** Most messages the admin tab loads at once. */
+const FEEDBACK_LIST_LIMIT = 200;
+
 export function createAdminController(services: Services) {
   return {
     listUsers: asyncHandler(async (_req, res) => {
@@ -41,6 +44,11 @@ export function createAdminController(services: Services) {
 
     usage: asyncHandler(async (_req, res) => {
       res.json(await services.admin.usage());
+    }),
+
+    /** What people wrote in the feedback form. Admin only (every /admin route is). */
+    feedback: asyncHandler(async (_req, res) => {
+      res.json(await services.feedback.list(FEEDBACK_LIST_LIMIT));
     }),
   };
 }

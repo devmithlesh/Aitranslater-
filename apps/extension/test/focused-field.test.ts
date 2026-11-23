@@ -454,7 +454,7 @@ describe('readSelection', () => {
     const p = append(document.createElement('p'));
     p.textContent = '  Request Management System  ';
     selectContents(p);
-    expect(bridge().readSelection()).toEqual({ text: 'Request Management System', site: location.hostname });
+    expect(bridge().readSelection()).toEqual({ text: 'Request Management System', site: location.hostname, inEditable: false });
   });
 
   it('returns the selected part of a focused textarea', () => {
@@ -462,6 +462,22 @@ describe('readSelection', () => {
     ta.focus();
     ta.setSelectionRange(6, 11);
     expect(bridge().readSelection()?.text).toBe('brave');
+  });
+
+  it('marks text highlighted inside the message box, so the popup does not offer Explain or Reply for it', () => {
+    const ta = textarea('hello brave world');
+    ta.focus();
+    ta.setSelectionRange(6, 11);
+    expect(bridge().readSelection()?.inEditable).toBe(true);
+  });
+
+  it('marks text highlighted in a contenteditable box too', () => {
+    const box = append(document.createElement('div'));
+    box.setAttribute('contenteditable', 'true');
+    box.textContent = 'hi there friend';
+    box.focus();
+    selectContents(box);
+    expect(bridge().readSelection()?.inEditable).toBe(true);
   });
 
   it('returns null when nothing is selected', () => {

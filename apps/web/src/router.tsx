@@ -8,6 +8,8 @@ import { RouteError } from '@/pages/RouteError';
 import LoginPage from '@/pages/LoginPage';
 import SignupPage from '@/pages/SignupPage';
 import PrivacyPage from '@/pages/PrivacyPage';
+import LandingPage from '@/pages/LandingPage';
+import GuidePage from '@/pages/GuidePage';
 import { RequireAdmin } from '@/features/admin/RequireAdmin';
 import { readFromState } from '@/features/auth/redirect';
 
@@ -15,6 +17,7 @@ const VariantTranslatorPage = lazy(() => import('@/pages/VariantTranslatorPage')
 const ProviderSettingsPage = lazy(() => import('@/pages/ProviderSettingsPage'));
 const UsersPage = lazy(() => import('@/pages/UsersPage'));
 const UsagePage = lazy(() => import('@/pages/UsagePage'));
+const FeedbackPage = lazy(() => import('@/pages/FeedbackPage'));
 const ConnectPage = lazy(() => import('@/pages/ConnectPage'));
 const ChangePasswordPage = lazy(() => import('@/pages/ChangePasswordPage'));
 const ConnectExtensionPage = lazy(() => import('@/pages/ConnectExtensionPage'));
@@ -60,6 +63,19 @@ function GuestOnly({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/** The home page: a public, indexable landing page for signed-out visitors, the app for signed-in users. */
+function HomeGate() {
+  const { token, unauthorized } = useAppSelector((s) => s.connection);
+  const location = useLocation();
+  const signedIn = !!token && !unauthorized;
+  if (!signedIn && location.pathname === '/') return <LandingPage />;
+  return (
+    <RequireConnection>
+      <SimpleLayout />
+    </RequireConnection>
+  );
+}
+
 export const router = createBrowserRouter([
   {
     path: '/login',
@@ -82,13 +98,11 @@ export const router = createBrowserRouter([
   { path: '/connect', element: <ConnectPage />, errorElement: <RouteError /> },
   // Public: linked from the Chrome Web Store listing, readable without an account.
   { path: '/privacy', element: <PrivacyPage />, errorElement: <RouteError /> },
+  // Public how-to guide with the video; opened from the extension popup.
+  { path: '/guide', element: <GuidePage />, errorElement: <RouteError /> },
   {
     path: '/',
-    element: (
-      <RequireConnection>
-        <SimpleLayout />
-      </RequireConnection>
-    ),
+    element: <HomeGate />,
     errorElement: <RouteError />,
     children: [
       { index: true, element: <VariantTranslatorPage /> },
@@ -98,6 +112,7 @@ export const router = createBrowserRouter([
       { path: 'settings/providers', element: <RequireAdmin><ProviderSettingsPage /></RequireAdmin> },
       { path: 'users', element: <RequireAdmin><UsersPage /></RequireAdmin> },
       { path: 'usage', element: <RequireAdmin><UsagePage /></RequireAdmin> },
+      { path: 'feedback', element: <RequireAdmin><FeedbackPage /></RequireAdmin> },
       { path: 'settings', element: <Navigate to="/" replace /> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],

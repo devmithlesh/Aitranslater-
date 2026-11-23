@@ -12,6 +12,8 @@ export const AUTO_LANGUAGE = 'auto';
 export const LANGUAGES: readonly Language[] = [
   { code: 'en', name: 'English', nativeName: 'English' },
   { code: 'hi', name: 'Hindi', nativeName: 'हिन्दी' },
+  // Hindi in Latin letters mixed with English ("kya haal hai"). No ISO code: only the AI model handles it.
+  { code: 'hinglish', name: 'Hinglish', nativeName: 'Hinglish' },
   { code: 'pa', name: 'Punjabi', nativeName: 'ਪੰਜਾਬੀ' },
   { code: 'bn', name: 'Bengali', nativeName: 'বাংলা' },
   { code: 'gu', name: 'Gujarati', nativeName: 'ગુજરાતી' },

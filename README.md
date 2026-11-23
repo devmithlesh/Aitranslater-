@@ -6,7 +6,7 @@ Select text anywhere → a floating toolbar appears → **Translate, Fix grammar
 
 ```
 apps/
-  backend/     Express + TypeScript API (providers, fallback, history, settings, usage)
+  backend/     Express + TypeScript API (providers, fallback, settings, usage)
   web/         React + Vite + Tailwind + Redux Toolkit dashboard
   extension/   Chrome Manifest V3 extension (React popup/options, Shadow-DOM toolbar)
 packages/
@@ -104,9 +104,9 @@ Keys can also come from env vars (see `apps/backend/.env.example`).
 
 - Text leaves the browser **only when you click an action**, and only the selected/submitted text. Nothing is read or sent while typing or browsing.
 - Password, credit-card and one-time-code fields are ignored. Generated text is never sent or submitted automatically; Replace always requires a click.
-- The content script cannot reach provider or history endpoints — the background worker enforces an allow-list; only extension pages can.
+- The content script cannot reach provider endpoints — the background worker enforces an allow-list; only extension pages can.
 - API keys live only on the backend, encrypted at rest; responses expose a masked preview (`••••a1b2`).
-- History can be disabled, auto-expired (retention days) or cleared at any time. Usage counters are kept without text.
+- No history is kept: the text people send and the answers they get are not stored. Only usage counters (counts, languages, characters) are kept. An older install's `history.json` is deleted on start; on Supabase run `supabase/schema.sql` once, which drops the old `history_items` table.
 - The access token is stored in `chrome.storage.local` (extension) and `localStorage` (dashboard) on your device — treat the connection code like a password.
 
 ## Known limitations
