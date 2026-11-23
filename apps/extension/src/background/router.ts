@@ -8,6 +8,7 @@ import {
   NAME_MAX_LENGTH,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
+  MAX_INPUT_CHARS,
 } from '@verba/shared';
 import { callBackend } from './backend';
 import {
@@ -82,8 +83,10 @@ export function parseRequest(value: unknown): BackgroundRequest | null {
       return { type: 'verba:open-dashboard', path: optString(value.path) };
     case 'verba:open-options':
       return { type: 'verba:open-options' };
-    case 'verba:open-popup':
-      return { type: 'verba:open-popup' };
+    case 'verba:open-popup': {
+      const replyTo = typeof value.replyTo === 'string' ? value.replyTo.trim().slice(-MAX_INPUT_CHARS) : '';
+      return replyTo ? { type: 'verba:open-popup', replyTo } : { type: 'verba:open-popup' };
+    }
     default:
       return null;
   }
@@ -110,7 +113,7 @@ async function dispatch(request: BackgroundRequest, sender: chrome.runtime.Messa
     case 'verba:open-options':
       return openOptions();
     case 'verba:open-popup':
-      return openPopup(sender);
+      return openPopup(sender, request.replyTo);
   }
 }
 

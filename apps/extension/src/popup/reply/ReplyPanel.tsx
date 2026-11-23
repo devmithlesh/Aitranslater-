@@ -24,6 +24,8 @@ import { VariantTabs } from '../translator/VariantTabs';
 import { useFieldInsert } from '../shared/useFieldInsert';
 
 const DEFAULT_LANG = 'en';
+/** A short pause so the "Added to the message box" line is seen before the popup closes. */
+const CLOSE_DELAY_MS = 700;
 const NO_FAVORITES: readonly string[] = [];
 
 interface Replies {
@@ -44,10 +46,12 @@ export interface ReplyPanelProps {
   settings: UserSettings | null;
   /** Replies are only put into the page while the panel is showing. */
   open?: boolean;
+  /** Close the popup once the first reply is in the page's box (the in-page Verba button of a webmail thread). */
+  closeAfterInsert?: boolean;
 }
 
 /** Drafts replies to a received message in several tones, and inserts the chosen one into the page's text box. */
-export function ReplyPanel({ message, settings, open = true }: ReplyPanelProps) {
+export function ReplyPanel({ message, settings, open = true, closeAfterInsert = false }: ReplyPanelProps) {
   const favorites = settings?.favoriteLanguages ?? NO_FAVORITES;
   const uid = useId();
   const intentId = `${uid}-intent`;
@@ -150,9 +154,11 @@ export function ReplyPanel({ message, settings, open = true }: ReplyPanelProps) 
       if (ok) {
         ownsBox.current = true;
         setAutoAdded(true);
+        // The reply is already in the email: nothing is left to do here, so get out of the way.
+        if (closeAfterInsert) window.setTimeout(() => window.close(), CLOSE_DELAY_MS);
       }
     });
-  }, [open, view.kind, field, activeText, insertQuietly]);
+  }, [open, view.kind, field, activeText, insertQuietly, closeAfterInsert]);
 
   return (
     <div className="min-w-0 space-y-2.5">

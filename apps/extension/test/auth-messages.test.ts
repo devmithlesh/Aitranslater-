@@ -71,3 +71,24 @@ describe('parseRequest: verba:login', () => {
     expect(parseRequest({ type: 'verba:login', email: 'ada@example.com', password: '' })).toBeNull();
   });
 });
+
+describe('parseRequest: verba:open-popup', () => {
+  it('keeps the last email the in-page button sends, trimmed', () => {
+    expect(parseRequest({ type: 'verba:open-popup', replyTo: '  Hello, can we meet tomorrow?  ' })).toEqual({
+      type: 'verba:open-popup',
+      replyTo: 'Hello, can we meet tomorrow?',
+    });
+  });
+
+  it('opens the popup normally without an email, and ignores a non-text one', () => {
+    expect(parseRequest({ type: 'verba:open-popup' })).toEqual({ type: 'verba:open-popup' });
+    expect(parseRequest({ type: 'verba:open-popup', replyTo: { evil: true } })).toEqual({ type: 'verba:open-popup' });
+    expect(parseRequest({ type: 'verba:open-popup', replyTo: '   ' })).toEqual({ type: 'verba:open-popup' });
+  });
+
+  it('caps a very long email at the input limit, keeping its end', () => {
+    const parsed = parseRequest({ type: 'verba:open-popup', replyTo: 'a'.repeat(20_000) + 'END' }) as { replyTo: string };
+    expect(parsed.replyTo.length).toBe(12_000);
+    expect(parsed.replyTo.endsWith('END')).toBe(true);
+  });
+});

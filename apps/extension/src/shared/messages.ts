@@ -78,7 +78,8 @@ export type BackgroundRequest =
   /** Content scripts cannot call chrome.runtime.openOptionsPage themselves. */
   | { type: 'verba:open-options' }
   /** Opens the toolbar popup. The only request a content script (the in-page Verba button) may send. */
-  | { type: 'verba:open-popup' };
+  /** From the in-page button. `replyTo` is the last email of the thread, to open the popup ready to reply to it. */
+  | { type: 'verba:open-popup'; replyTo?: string };
 
 /** Response type for each request `type`. */
 export interface BackgroundResponseMap {

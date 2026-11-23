@@ -59,6 +59,31 @@ const STYLE = `
   button:focus-visible { outline: 2px solid #1d4ed8; outline-offset: 2px; }
 `;
 
+/** Bodies of the emails shown in an open thread, per webmail. The compose box is never one of them. */
+const MESSAGE_BODY_SELECTORS: ReadonlyArray<{ host: string; selector: string }> = [
+  { host: 'mail.google.com', selector: 'div.a3s' },
+  { host: 'outlook', selector: 'div[aria-label="Message body"], div[role="document"]' },
+  { host: 'mail.yahoo.com', selector: 'div[data-test-id="message-view-body-content"]' },
+];
+/** Longest email text handed to the popup (the reply only uses the end of very long mails). */
+const MAX_EMAIL_CHARS = 12_000;
+
+/** Text of the last email in the open thread, or '' when there is none (a new message, an inbox view). */
+function lastEmailText(compose: HTMLElement | null): string {
+  const host = location.hostname.toLowerCase();
+  const entry = MESSAGE_BODY_SELECTORS.find((item) => host.includes(item.host));
+  if (!entry) return '';
+  const bodies = Array.from(document.querySelectorAll<HTMLElement>(entry.selector)).filter(
+    (el) =>
+      !(compose && (compose.contains(el) || el.contains(compose))) &&
+      !el.isContentEditable &&
+      el.getClientRects().length > 0 &&
+      el.innerText.trim() !== '',
+  );
+  const last = bodies[bodies.length - 1];
+  return last ? last.innerText.trim().slice(-MAX_EMAIL_CHARS) : '';
+}
+
 export function startLauncher(): void {
   if (window !== window.top || !isMailHost(location.hostname)) return;
 
@@ -84,7 +109,10 @@ export function startLauncher(): void {
     button.addEventListener('mousedown', (event) => event.preventDefault());
     button.addEventListener('click', () => {
       try {
-        chrome.runtime.sendMessage({ type: 'verba:open-popup' }, (res?: { ok?: boolean; error?: { message?: string } }) => {
+        // In a thread, hand over the email being answered so the popup opens ready to reply to it.
+        const replyTo = lastEmailText(target);
+        const message = replyTo ? { type: 'verba:open-popup', replyTo } : { type: 'verba:open-popup' };
+        chrome.runtime.sendMessage(message, (res?: { ok?: boolean; error?: { message?: string } }) => {
           const failed = chrome.runtime.lastError !== undefined || res?.ok === false;
           if (failed) flash(res?.error?.message ?? 'Click the Verba icon in the toolbar to open Verba.');
         });

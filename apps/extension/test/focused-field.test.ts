@@ -508,3 +508,23 @@ describe('readSelection', () => {
     expect(bridge().readSelection()?.text.length).toBe(MAX_FIELD_TEXT);
   });
 });
+
+describe('webmail signatures', () => {
+  function gmailCompose(draft: string): HTMLDivElement {
+    const box = editable('');
+    box.innerHTML = `<div>${draft}</div><span class="gmail_signature_prefix">-- </span><div class="gmail_signature" data-smartmail="gmail_signature">Mithlesh Nirmal<br>TEAM LEAD</div>`;
+    return box;
+  }
+
+  it('reads only the text above a Gmail signature, so the signature is never translated', () => {
+    const box = gmailCompose('kal milte hai');
+    box.focus();
+    expect(readFocused()?.text).toBe('kal milte hai');
+  });
+
+  it('reads an empty draft when the box holds only the signature', () => {
+    const box = gmailCompose('');
+    box.focus();
+    expect(readFocused()?.text).toBe('');
+  });
+});

@@ -70,6 +70,40 @@ function visibleText(el: HTMLElement): string {
   return typeof el.innerText === 'string' ? el.innerText : (el.textContent ?? '');
 }
 
+/**
+ * Where the user's own words end in a webmail compose box: the signature, or the quoted earlier mail.
+ * Verba reads and replaces only the part above it, so a signature is never translated or wiped out.
+ */
+const MAIL_BOUNDARY_SELECTOR = [
+  '.gmail_signature_prefix',
+  '.gmail_signature',
+  '[data-smartmail="gmail_signature"]',
+  '.gmail_quote',
+  '#Signature',
+  '[id^="Signature_"]',
+  '#divRplyFwdMsg',
+  '#appendonsend',
+].join(', ');
+
+function mailBoundary(host: HTMLElement): Element | null {
+  try {
+    return host.querySelector(MAIL_BOUNDARY_SELECTOR);
+  } catch {
+    return null;
+  }
+}
+
+/** The box's text above the signature (or all of it when there is none). */
+function draftText(host: HTMLElement): string {
+  const full = visibleText(host);
+  const boundary = mailBoundary(host);
+  if (!(boundary instanceof HTMLElement)) return full;
+  const marker = visibleText(boundary).trim().slice(0, 40);
+  const at = marker ? full.indexOf(marker) : -1;
+  if (at < 0) return full;
+  return full.slice(0, at).replace(/\n?--\s*$/, '').trimEnd();
+}
+
 function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
@@ -267,7 +301,7 @@ export function readFocused(): FocusedFieldInfo | null {
     const target = currentTarget();
     if (!target || !isActiveHere()) return null;
     const { el, kind } = target;
-    const raw = kind === 'input' ? (el as HTMLInputElement | HTMLTextAreaElement).value : visibleText(el);
+    const raw = kind === 'input' ? (el as HTMLInputElement | HTMLTextAreaElement).value : draftText(el);
     const text = raw.trimEnd().slice(0, MAX_FIELD_TEXT);
     const info: FocusedFieldInfo = { text, focusedAt, kind, site: location.hostname, guessed };
     if (guessed && guessScore !== undefined) info.guessScore = guessScore;
@@ -286,7 +320,7 @@ async function waitForText(el: HTMLElement, text: string): Promise<boolean> {
   const wanted = normalize(text);
   for (const ms of SETTLE_DELAYS_MS) {
     await delay(ms);
-    if (normalize(visibleText(el)) === wanted) return true;
+    if (normalize(draftText(el)) === wanted) return true;
   }
   return false;
 }
@@ -295,6 +329,9 @@ async function waitForText(el: HTMLElement, text: string): Promise<boolean> {
 function selectHostContents(host: HTMLElement): void {
   const range = document.createRange();
   range.selectNodeContents(host);
+  // In a webmail box, stop before the signature or quoted mail so they stay as they are.
+  const boundary = mailBoundary(host);
+  if (boundary) range.setEndBefore(boundary);
   const sel = selectionFor(host);
   if (sel) {
     sel.removeAllRanges();
@@ -433,7 +470,7 @@ async function insertIntoEditable(host: HTMLElement, text: string): Promise<Inse
 
   // 4. Last resort. Only for plain contenteditables: writing the DOM of a framework editor would
   // corrupt its state, so those stay blocked.
-  if (!hasFrameworkMarkers(host)) {
+  if (!hasFrameworkMarkers(host) && !mailBoundary(host)) {
     host.textContent = text;
     placeCaretAtEnd(host);
     host.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true, inputType: 'insertText', data: text }));

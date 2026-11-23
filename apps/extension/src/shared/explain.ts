@@ -27,6 +27,33 @@ export interface PendingExplain {
   requestedAt: number;
 }
 
+/**
+ * The last email of a webmail thread, handed from the in-page Verba button to the popup so it opens in
+ * reply mode. Written by the background (session storage: content scripts cannot read it back).
+ */
+export const PENDING_REPLY_KEY = 'verba.pendingReply';
+/** Older hand-overs are ignored: the popup must open right after the click. */
+export const PENDING_REPLY_MAX_AGE_MS = 60_000;
+
+export interface PendingReply {
+  /** Text of the email being answered, trimmed, at most MAX_INPUT_CHARS characters. */
+  text: string;
+  /** The tab it came from; the popup only uses it for that tab. */
+  tabId: number;
+  requestedAt: number;
+}
+
+export function isPendingReply(value: unknown): value is PendingReply {
+  return (
+    isRecord(value) &&
+    typeof value.text === 'string' &&
+    value.text.length > 0 &&
+    value.text.length <= MAX_INPUT_CHARS &&
+    typeof value.tabId === 'number' &&
+    typeof value.requestedAt === 'number'
+  );
+}
+
 export function isPendingExplain(value: unknown): value is PendingExplain {
   return (
     isRecord(value) &&
